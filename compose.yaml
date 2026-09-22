@@ -1,0 +1,15 @@
+services:
+  ordering-app:
+    build: .
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      PORT: 3000
+      ADMIN_TOKEN: ${ADMIN_TOKEN:?请在服务器环境中配置 ADMIN_TOKEN}
+    volumes:
+      - order-data:/app/data
+    ports:
+      - "127.0.0.1:3000:3000"
+
+volumes:
+  order-data:

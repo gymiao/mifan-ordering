@@ -1,0 +1,239 @@
+const http = require('node:http');
+const fs = require('node:fs');
+const path = require('node:path');
+const crypto = require('node:crypto');
+
+const PORT = Number(process.env.PORT || 3000);
+const HOST = process.env.HOST || '0.0.0.0';
+const ADMIN_TOKEN = process.env.ADMIN_TOKEN || '';
+const PUBLIC_DIR = path.join(__dirname, 'public');
+const DATA_DIR = path.join(__dirname, 'data');
+const MENU_FILE = path.join(DATA_DIR, 'menu.json');
+const ORDER_FILE = path.join(DATA_DIR, 'orders.json');
+const MAX_BODY = 64 * 1024;
+let menu = JSON.parse(fs.readFileSync(MENU_FILE, 'utf8'));
+let menuById = new Map(menu.items.map((item) => [item.id, item]));
+
+let orders = [];
+try { orders = JSON.parse(fs.readFileSync(ORDER_FILE, 'utf8')); } catch { orders = []; }
+
+const contentTypes = {
+  '.html': 'text/html; charset=utf-8',
+  '.css': 'text/css; charset=utf-8',
+  '.js': 'text/javascript; charset=utf-8',
+  '.json': 'application/json; charset=utf-8',
+  '.svg': 'image/svg+xml'
+};
+
+function json(res, status, payload, headers = {}) {
+  const body = JSON.stringify(payload);
+  res.writeHead(status, {
+    'Content-Type': 'application/json; charset=utf-8',
+    'Content-Length': Buffer.byteLength(body),
+    'Cache-Control': 'no-store',
+    ...headers
+  });
+  res.end(body);
+}
+
+function readBody(req) {
+  return new Promise((resolve, reject) => {
+    let body = '';
+    req.on('data', (chunk) => {
+      body += chunk;
+      if (body.length > MAX_BODY) reject(new Error('请求内容过大'));
+    });
+    req.on('end', () => {
+      try { resolve(JSON.parse(body || '{}')); } catch { reject(new Error('JSON 格式错误')); }
+    });
+    req.on('error', reject);
+  });
+}
+
+function persistOrders() {
+  const tempFile = `${ORDER_FILE}.tmp`;
+  fs.writeFileSync(tempFile, JSON.stringify(orders, null, 2));
+  fs.renameSync(tempFile, ORDER_FILE);
+}
+
+function persistMenu() {
+  const tempFile = `${MENU_FILE}.tmp`;
+  fs.writeFileSync(tempFile, JSON.stringify(menu, null, 2) + '\n');
+  fs.renameSync(tempFile, MENU_FILE);
+  menuById = new Map(menu.items.map((item) => [item.id, item]));
+}
+
+function requireAdmin(req) {
+  if (!ADMIN_TOKEN) throw new Error('服务端尚未配置 ADMIN_TOKEN');
+  const authorization = req.headers.authorization || '';
+  if (authorization !== `Bearer ${ADMIN_TOKEN}`) throw new Error('管理员身份验证失败');
+}
+
+function slugify(value) {
+  const slug = String(value || '').trim().toLowerCase()
+    .replace(/[^a-z0-9\u4e00-\u9fff]+/g, '-')
+    .replace(/^-+|-+$/g, '').slice(0, 48);
+  return slug || `item-${Date.now()}`;
+}
+
+function normalizeMenuItem(input, existingId) {
+  const name = String(input.name || '').trim().slice(0, 40);
+  const description = String(input.description || '').trim().slice(0, 120);
+  const price = Number(input.price);
+  const category = String(input.category || '').trim();
+  if (!name || !description || !category || !Number.isFinite(price) || price <= 0 || price > 9999) {
+    throw new Error('菜品名称、描述、分类和价格不能为空');
+  }
+  if (!menu.categories.some((entry) => entry.id === category)) throw new Error('菜品分类不存在');
+  const id = existingId || slugify(input.id || name);
+  if (!existingId && menuById.has(id)) throw new Error('菜品 ID 已存在');
+  return {
+    id,
+    category,
+    name,
+    description,
+    price: Math.round(price * 100) / 100,
+    rating: Number.isFinite(Number(input.rating)) ? Math.max(0, Math.min(5, Number(input.rating))) : 5,
+    sales: Number.isInteger(Number(input.sales)) ? Math.max(0, Number(input.sales)) : 0,
+    emoji: String(input.emoji || '🍱').slice(0, 4),
+    color: /^#[0-9a-f]{6}$/i.test(input.color || '') ? input.color : '#7da66a',
+    tags: Array.isArray(input.tags) ? input.tags.map((tag) => String(tag).trim()).filter(Boolean).slice(0, 4) : [],
+    available: input.available !== false
+  };
+}
+
+function adminError(res, error) {
+  const status = error.message.includes('身份验证') ? 401 : error.message.includes('尚未配置') ? 503 : 400;
+  return json(res, status, { error: error.message });
+}
+
+function calculateOrder(input) {
+  if (!Array.isArray(input.items) || input.items.length === 0) throw new Error('购物车为空');
+  if (!['delivery', 'pickup'].includes(input.fulfillment)) throw new Error('请选择取餐方式');
+
+  const merged = new Map();
+  for (const line of input.items) {
+    const quantity = Number(line.quantity);
+    if (!menuById.has(line.id) || !Number.isInteger(quantity) || quantity < 1 || quantity > 20) {
+      throw new Error('商品或数量无效');
+    }
+    merged.set(line.id, Math.min(20, (merged.get(line.id) || 0) + quantity));
+  }
+
+  const lines = [...merged].map(([id, quantity]) => {
+    const item = menuById.get(id);
+    if (!item.available) throw new Error(`${item.name} 已售罄`);
+    return { id, name: item.name, price: item.price, quantity, subtotal: item.price * quantity };
+  });
+  const subtotal = lines.reduce((sum, line) => sum + line.subtotal, 0);
+  const deliveryFee = input.fulfillment === 'delivery' && subtotal < menu.restaurant.freeDeliveryAt
+    ? menu.restaurant.deliveryFee : 0;
+  const contact = String(input.contact || '').trim().slice(0, 40);
+  const address = String(input.address || '').trim().slice(0, 160);
+  if (!contact) throw new Error('请填写联系电话');
+  if (input.fulfillment === 'delivery' && !address) throw new Error('请填写配送地址');
+  return {
+    status: 'confirmed',
+    fulfillment: input.fulfillment,
+    contact,
+    address,
+    note: String(input.note || '').trim().slice(0, 120),
+    items: lines,
+    subtotal,
+    deliveryFee,
+    total: subtotal + deliveryFee,
+    createdAt: new Date().toISOString(),
+    estimatedMinutes: input.fulfillment === 'pickup' ? 20 : 35
+  };
+}
+
+function createOrder(input) {
+  const order = {
+    id: `MF${Date.now().toString().slice(-8)}${crypto.randomInt(10, 99)}`,
+    ...calculateOrder(input)
+  };
+  orders.unshift(order);
+  orders = orders.slice(0, 1000);
+  persistOrders();
+  return order;
+}
+
+function serveStatic(req, res, pathname) {
+  const requested = pathname === '/' ? '/index.html' : pathname;
+  const filePath = path.resolve(PUBLIC_DIR, `.${requested}`);
+  if (!filePath.startsWith(`${PUBLIC_DIR}${path.sep}`)) return json(res, 403, { error: '禁止访问' });
+  fs.readFile(filePath, (error, data) => {
+    if (error) return json(res, 404, { error: '页面不存在' });
+    const ext = path.extname(filePath);
+    res.writeHead(200, {
+      'Content-Type': contentTypes[ext] || 'application/octet-stream',
+      'Content-Length': data.length,
+      'Cache-Control': ext === '.html' ? 'no-cache' : 'public, max-age=86400'
+    });
+    res.end(data);
+  });
+}
+
+const server = http.createServer(async (req, res) => {
+  const url = new URL(req.url, `http://${req.headers.host || 'localhost'}`);
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.setHeader('Referrer-Policy', 'same-origin');
+
+  if (req.method === 'GET' && url.pathname === '/api/health') {
+    return json(res, 200, { ok: true, time: new Date().toISOString() });
+  }
+  if (req.method === 'GET' && url.pathname === '/api/menu') {
+    return json(res, 200, menu, { 'Cache-Control': 'public, max-age=60, stale-while-revalidate=300' });
+  }
+  if (req.method === 'POST' && url.pathname === '/api/admin/menu') {
+    try {
+      requireAdmin(req);
+      const item = normalizeMenuItem(await readBody(req));
+      menu.items.push(item);
+      persistMenu();
+      return json(res, 201, { item });
+    } catch (error) { return adminError(res, error); }
+  }
+  const adminMenuMatch = url.pathname.match(/^\/api\/admin\/menu\/([A-Za-z0-9\u4e00-\u9fff-]+)$/);
+  if (adminMenuMatch && (req.method === 'PUT' || req.method === 'DELETE')) {
+    try {
+      requireAdmin(req);
+      const id = adminMenuMatch[1];
+      const index = menu.items.findIndex((item) => item.id === id);
+      if (index < 0) return json(res, 404, { error: '菜品不存在' });
+      if (req.method === 'DELETE') {
+        menu.items.splice(index, 1);
+        persistMenu();
+        return json(res, 200, { deleted: id });
+      }
+      const input = await readBody(req);
+      const item = normalizeMenuItem({ ...menu.items[index], ...input }, id);
+      menu.items[index] = item;
+      persistMenu();
+      return json(res, 200, { item });
+    } catch (error) { return adminError(res, error); }
+  }
+  if (req.method === 'POST' && url.pathname === '/api/orders') {
+    try {
+      const order = createOrder(await readBody(req));
+      return json(res, 201, { order });
+    } catch (error) {
+      return json(res, 400, { error: error.message || '下单失败' });
+    }
+  }
+  const match = url.pathname.match(/^\/api\/orders\/([A-Za-z0-9-]+)$/);
+  if (req.method === 'GET' && match) {
+    const order = orders.find((entry) => entry.id === match[1]);
+    return order ? json(res, 200, { order }) : json(res, 404, { error: '订单不存在' });
+  }
+  if (req.method === 'GET' || req.method === 'HEAD') return serveStatic(req, res, url.pathname);
+  return json(res, 405, { error: '请求方法不支持' });
+});
+
+if (require.main === module) {
+  server.listen(PORT, HOST, () => {
+    console.log(`米饭食堂已启动：http://${HOST}:${PORT}`);
+  });
+}
+
+module.exports = { calculateOrder, createOrder, menu, normalizeMenuItem };

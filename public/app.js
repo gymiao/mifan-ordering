@@ -46,9 +46,9 @@ function renderMenu() {
   );
   $('#menu-grid').innerHTML = items.length ? items.map((item) => `
     <article class="dish-card">
-      <div class="dish-visual" style="background:${item.color}28">
+      <div class="dish-visual ${item.image ? 'has-image image-loading' : ''}" style="background:${item.color}28">
         ${item.tags[0] ? `<span class="badge">${item.tags[0]}</span>` : ''}
-        <span class="dish-emoji">${item.emoji}</span>
+        ${item.image ? `<span class="image-loading-label">图片加载中…</span><img class="dish-image" src="${item.image}" alt="${item.name}" loading="lazy"><span class="dish-emoji image-fallback" hidden>${item.emoji}</span>` : `<span class="dish-emoji">${item.emoji}</span>`}
       </div>
       <div class="dish-info">
         <div class="dish-title-row"><h3>${item.name}</h3><span class="rating">★ ${item.rating}</span></div>
@@ -56,6 +56,21 @@ function renderMenu() {
         <div class="dish-bottom"><span class="price">${money(item.price)}</span>${quantityControl(item)}</div>
       </div>
     </article>`).join('') : '<p class="no-results">没有找到相关菜品，换个关键词试试</p>';
+  document.querySelectorAll('.dish-image').forEach((image) => {
+    image.addEventListener('load', () => {
+      const visual = image.closest('.dish-visual');
+      visual.classList.remove('image-loading');
+      visual.querySelector('.image-loading-label')?.remove();
+      image.classList.add('loaded');
+    }, { once: true });
+    image.addEventListener('error', () => {
+      const visual = image.closest('.dish-visual');
+      image.remove();
+      visual.classList.remove('image-loading');
+      const fallback = visual.querySelector('.image-fallback');
+      if (fallback) fallback.hidden = false;
+    }, { once: true });
+  });
 }
 
 function cartTotals() {

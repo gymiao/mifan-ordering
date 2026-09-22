@@ -2,6 +2,8 @@
 
 一个可直接运行的前后端点餐 MVP。前端使用原生 HTML/CSS/JavaScript，后端使用 Node.js 内置 HTTP 服务，不依赖第三方运行库，适合快速验证和低成本部署。
 
+服务器使用 Conda 部署时，请直接查看 [CONDA_DEPLOYMENT.md](CONDA_DEPLOYMENT.md)。
+
 ## 本地运行
 
 需要 Node.js 20 或更高版本：
@@ -22,6 +24,7 @@ npm start
 - 订单持久化到 `data/orders.json`，采用临时文件替换避免写入半成品
 - 菜单缓存、静态资源长缓存、健康检查接口
 - `/admin.html` 菜单管理后台，支持新增、编辑、删除、上下架
+- 管理后台支持 JPG、PNG、WebP 餐品图片上传，单张最大 8MB
 - 管理写接口使用 `ADMIN_TOKEN` 鉴权，菜单公开接口保持只读
 
 测试文件位于 `test/`，覆盖菜单契约、订单核心规则和管理员菜品数据校验，可在具备 Node.js 20+ 的 CI 或服务器环境中执行 `npm test`。
@@ -35,6 +38,7 @@ npm start
 | `POST` | `/api/admin/menu` | 新增菜品，需要 `Authorization: Bearer <ADMIN_TOKEN>` |
 | `PUT` | `/api/admin/menu/:id` | 编辑或上下架菜品，需要管理员令牌 |
 | `DELETE` | `/api/admin/menu/:id` | 删除菜品，需要管理员令牌 |
+| `POST` | `/api/admin/uploads` | 上传餐品图片，需要管理员令牌 |
 | `POST` | `/api/orders` | 创建订单，价格以后端为准 |
 | `GET` | `/api/orders/:id` | 查询单个订单 |
 

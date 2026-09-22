@@ -10,7 +10,10 @@ const PUBLIC_DIR = path.join(__dirname, 'public');
 const DATA_DIR = path.join(__dirname, 'data');
 const MENU_FILE = path.join(DATA_DIR, 'menu.json');
 const ORDER_FILE = path.join(DATA_DIR, 'orders.json');
+const UPLOAD_DIR = path.join(DATA_DIR, 'uploads');
 const MAX_BODY = 64 * 1024;
+const MAX_UPLOAD = 8 * 1024 * 1024;
+fs.mkdirSync(UPLOAD_DIR, { recursive: true });
 let menu = JSON.parse(fs.readFileSync(MENU_FILE, 'utf8'));
 let menuById = new Map(menu.items.map((item) => [item.id, item]));
 
@@ -37,17 +40,56 @@ function json(res, status, payload, headers = {}) {
 }
 
 function readBody(req) {
-  return new Promise((resolve, reject) => {
-    let body = '';
-    req.on('data', (chunk) => {
-      body += chunk;
-      if (body.length > MAX_BODY) reject(new Error('请求内容过大'));
-    });
-    req.on('end', () => {
-      try { resolve(JSON.parse(body || '{}')); } catch { reject(new Error('JSON 格式错误')); }
-    });
-    req.on('error', reject);
+  return readBuffer(req, MAX_BODY).then((body) => {
+    try { return JSON.parse(body.toString('utf8') || '{}'); } catch { throw new Error('JSON 格式错误'); }
   });
+}
+
+function readBuffer(req, maxBytes) {
+  return new Promise((resolve, reject) => {
+    const chunks = [];
+    let size = 0;
+    let settled = false;
+    req.on('data', (chunk) => {
+      if (settled) return;
+      size += chunk.length;
+      if (size > maxBytes) {
+        settled = true;
+        reject(new Error('上传内容过大'));
+        req.destroy();
+        return;
+      }
+      chunks.push(chunk);
+    });
+    req.on('end', () => { if (!settled) resolve(Buffer.concat(chunks)); });
+    req.on('error', (error) => { if (!settled) reject(error); });
+  });
+}
+
+function parseMultipart(body, contentType) {
+  const match = String(contentType || '').match(/boundary=(?:"([^"]+)"|([^;]+))/i);
+  if (!match) throw new Error('上传格式不正确');
+  const boundary = `--${match[1] || match[2]}`;
+  const parts = body.toString('latin1').split(boundary);
+  for (const rawPart of parts) {
+    const part = rawPart.replace(/^\r\n|\r\n--$|\r\n$/g, '');
+    const separator = part.indexOf('\r\n\r\n');
+    if (separator < 0) continue;
+    const headers = part.slice(0, separator);
+    const content = Buffer.from(part.slice(separator + 4), 'latin1');
+    const disposition = headers.match(/name="([^"]+)"(?:;\s*filename="([^"]*)")?/i);
+    if (!disposition) continue;
+    if (disposition[2]) return { field: disposition[1], filename: disposition[2], content };
+  }
+  throw new Error('请选择图片文件');
+}
+
+function detectImageExtension(file) {
+  const type = file.content;
+  if (type.length >= 8 && type.subarray(0, 8).equals(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]))) return 'png';
+  if (type.length >= 3 && type.subarray(0, 3).equals(Buffer.from([255, 216, 255]))) return 'jpg';
+  if (type.length >= 12 && type.toString('ascii', 0, 4) === 'RIFF' && type.toString('ascii', 8, 12) === 'WEBP') return 'webp';
+  throw new Error('只支持 JPG、PNG 或 WebP 图片');
 }
 
 function persistOrders() {
@@ -92,6 +134,7 @@ function normalizeMenuItem(input, existingId) {
     category,
     name,
     description,
+    image: typeof input.image === 'string' && input.image.startsWith('/uploads/') ? input.image.slice(0, 180) : '',
     price: Math.round(price * 100) / 100,
     rating: Number.isFinite(Number(input.rating)) ? Math.max(0, Math.min(5, Number(input.rating))) : 5,
     sales: Number.isInteger(Number(input.sales)) ? Math.max(0, Number(input.sales)) : 0,
@@ -174,6 +217,20 @@ function serveStatic(req, res, pathname) {
   });
 }
 
+function serveUpload(res, pathname) {
+  const filename = path.basename(decodeURIComponent(pathname.slice('/uploads/'.length)));
+  if (!filename || filename !== decodeURIComponent(pathname.slice('/uploads/'.length))) return json(res, 400, { error: '图片地址无效' });
+  const filePath = path.resolve(UPLOAD_DIR, filename);
+  if (!filePath.startsWith(`${UPLOAD_DIR}${path.sep}`)) return json(res, 403, { error: '禁止访问' });
+  fs.readFile(filePath, (error, data) => {
+    if (error) return json(res, 404, { error: '图片不存在' });
+    const ext = path.extname(filePath).toLowerCase();
+    const contentType = { '.jpg': 'image/jpeg', '.png': 'image/png', '.webp': 'image/webp' }[ext] || 'application/octet-stream';
+    res.writeHead(200, { 'Content-Type': contentType, 'Content-Length': data.length, 'Cache-Control': 'public, max-age=31536000, immutable' });
+    res.end(data);
+  });
+}
+
 const server = http.createServer(async (req, res) => {
   const url = new URL(req.url, `http://${req.headers.host || 'localhost'}`);
   res.setHeader('X-Content-Type-Options', 'nosniff');
@@ -182,8 +239,21 @@ const server = http.createServer(async (req, res) => {
   if (req.method === 'GET' && url.pathname === '/api/health') {
     return json(res, 200, { ok: true, time: new Date().toISOString() });
   }
+  if (req.method === 'GET' && url.pathname.startsWith('/uploads/')) {
+    return serveUpload(res, url.pathname);
+  }
   if (req.method === 'GET' && url.pathname === '/api/menu') {
     return json(res, 200, menu, { 'Cache-Control': 'public, max-age=60, stale-while-revalidate=300' });
+  }
+  if (req.method === 'POST' && url.pathname === '/api/admin/uploads') {
+    try {
+      requireAdmin(req);
+      const file = parseMultipart(await readBuffer(req, MAX_UPLOAD), req.headers['content-type']);
+      const extension = detectImageExtension(file);
+      const filename = `${crypto.randomUUID()}.${extension}`;
+      fs.writeFileSync(path.join(UPLOAD_DIR, filename), file.content);
+      return json(res, 201, { url: `/uploads/${filename}`, size: file.content.length });
+    } catch (error) { return adminError(res, error); }
   }
   if (req.method === 'POST' && url.pathname === '/api/admin/menu') {
     try {

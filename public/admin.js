@@ -3,7 +3,9 @@ const state = { menu: null, editing: null, token: sessionStorage.getItem('mifan-
 const authHeaders = () => ({ Authorization: `Bearer ${state.token}`, 'Content-Type': 'application/json' });
 
 async function api(path, options = {}) {
-  const response = await fetch(path, { ...options, headers: { ...authHeaders(), ...(options.headers || {}) } });
+  const headers = { ...authHeaders(), ...(options.headers || {}) };
+  if (options.body instanceof FormData) delete headers['Content-Type'];
+  const response = await fetch(path, { ...options, headers });
   const data = await response.json().catch(() => ({}));
   if (!response.ok) throw new Error(data.error || '请求失败');
   return data;
@@ -28,7 +30,9 @@ function render() {
 function openEditor(item) {
   state.editing = item?.id || null; $('#modal-title').textContent = item ? '编辑菜品' : '新增菜品';
   const form = $('#item-form'); form.reset();
-  if (item) for (const [key, value] of Object.entries(item)) { const field = form.elements[key]; if (!field) continue; if (key === 'tags') field.value = value.join(','); else if (key === 'available') field.checked = value; else field.value = value; }
+  if (item) for (const [key, value] of Object.entries(item)) { const field = form.elements[key]; if (!field || key === 'image') continue; if (key === 'tags') field.value = value.join(','); else if (key === 'available') field.checked = value; else field.value = value; }
+  form.elements.imageUrl.value = item?.image || '';
+  $('#image-tip').textContent = item?.image ? '已上传图片，选择新文件可替换' : '支持 JPG、PNG、WebP，最大 8MB';
   $('#form-error').textContent = ''; $('#modal').classList.add('open'); $('#modal').setAttribute('aria-hidden', 'false');
 }
 function closeEditor() { $('#modal').classList.remove('open'); $('#modal').setAttribute('aria-hidden', 'true'); }
@@ -37,7 +41,7 @@ function showToast(message) { const el = $('#toast'); el.textContent = message; 
 $('#token-form').addEventListener('submit', (event) => { event.preventDefault(); state.token = $('#token').value; sessionStorage.setItem('mifan-admin-token', state.token); load(); });
 $('#new-item').addEventListener('click', () => openEditor()); $('#cancel').addEventListener('click', closeEditor); $('#cancel-bottom').addEventListener('click', closeEditor);
 $('#filter').addEventListener('input', render); $('#category-filter').addEventListener('change', render);
-$('#item-form').addEventListener('submit', async (event) => { event.preventDefault(); const form = new FormData(event.target); const body = Object.fromEntries(form.entries()); body.price = Number(body.price); body.tags = String(body.tags || '').split(',').map((tag) => tag.trim()).filter(Boolean); body.available = form.has('available'); $('#save').disabled = true; try { await api(state.editing ? `/api/admin/menu/${state.editing}` : '/api/admin/menu', { method: state.editing ? 'PUT' : 'POST', body: JSON.stringify(body) }); closeEditor(); await load(); showToast('菜单已保存'); } catch (error) { $('#form-error').textContent = error.message; } finally { $('#save').disabled = false; } });
+$('#item-form').addEventListener('submit', async (event) => { event.preventDefault(); const form = new FormData(event.target); const body = Object.fromEntries(form.entries()); body.price = Number(body.price); body.tags = String(body.tags || '').split(',').map((tag) => tag.trim()).filter(Boolean); body.available = form.has('available'); $('#save').disabled = true; try { const file = form.get('image'); let imageUrl = form.get('imageUrl') || ''; if (file && file.size) { $('#image-tip').textContent = '图片上传中…'; const uploadData = new FormData(); uploadData.append('image', file); const uploaded = await api('/api/admin/uploads', { method: 'POST', body: uploadData }); imageUrl = uploaded.url; } delete body.imageUrl; body.image = imageUrl; await api(state.editing ? `/api/admin/menu/${state.editing}` : '/api/admin/menu', { method: state.editing ? 'PUT' : 'POST', body: JSON.stringify(body) }); closeEditor(); await load(); showToast('菜单已保存'); } catch (error) { $('#form-error').textContent = error.message; } finally { $('#save').disabled = false; } });
 
 $('#item-list').addEventListener('click', async (event) => { const edit = event.target.closest('[data-edit]'); const remove = event.target.closest('[data-delete]'); const toggle = event.target.closest('[data-toggle]'); try { if (edit) openEditor(state.menu.items.find((item) => item.id === edit.dataset.edit)); if (remove && confirm('确认删除这道菜品吗？')) { await api(`/api/admin/menu/${remove.dataset.delete}`, { method: 'DELETE' }); await load(); showToast('菜品已删除'); } if (toggle) { const item = state.menu.items.find((entry) => entry.id === toggle.dataset.toggle); await api(`/api/admin/menu/${item.id}`, { method: 'PUT', body: JSON.stringify({ ...item, available: !item.available }) }); await load(); showToast(item.available ? '菜品已下架' : '菜品已上架'); } } catch (error) { showToast(error.message); } });
 load();

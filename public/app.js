@@ -7,7 +7,8 @@ const state = {
   sharedDish: new URLSearchParams(location.search).get('dish') || '',
   token: localStorage.getItem('mifan-customer-token') || '',
   user: null,
-  pendingCheckout: false
+  pendingCheckout: false,
+  mascotVisible: localStorage.getItem('mifan-egg-mascot-visible') !== 'false'
 };
 
 const $ = (selector) => document.querySelector(selector);
@@ -18,9 +19,38 @@ function openCustomerAuth(open) {
   $('#customer-auth-modal').classList.toggle('open', open);
   $('#customer-auth-modal').setAttribute('aria-hidden', String(!open));
 }
+function openCustomerMenu(open) {
+  $('#customer-menu').hidden = !open;
+  $('#customer-account').setAttribute('aria-expanded', String(open));
+}
 function updateCustomerAccount() {
-  $('#customer-account').setAttribute('aria-label', state.user ? `已登录：${state.user.username}` : '登录');
-  $('#customer-account').title = state.user ? `已登录：${state.user.username}` : '登录后点餐';
+  const loggedIn = Boolean(state.user);
+  $('#customer-account').setAttribute('aria-label', loggedIn ? `已登录：${state.user.username}` : '用户菜单');
+  $('#customer-account').title = loggedIn ? `已登录：${state.user.username}` : '登录或退出';
+  $('#customer-menu-name').textContent = loggedIn ? `已登录：${state.user.username}` : '账户';
+  $('#customer-login').hidden = loggedIn;
+  $('#customer-logout').hidden = !loggedIn;
+}
+function renderEggMascot() {
+  const mascot = $('#egg-mascot');
+  const toggle = $('#egg-mascot-toggle');
+  mascot.classList.toggle('hidden', !state.mascotVisible);
+  toggle.textContent = state.mascotVisible ? '隐藏' : '显示荷包蛋';
+  toggle.setAttribute('aria-pressed', String(state.mascotVisible));
+  if (!state.menu) return;
+  const newestItems = state.menu.items.filter((item) => item.available).slice(-3);
+  if (!newestItems.length) {
+    $('#egg-mascot-message').textContent = '菜单正在准备中，稍后再来看看吧。';
+    return;
+  }
+  const item = newestItems[Math.floor(Math.random() * newestItems.length)];
+  const descriptions = ['香气扑鼻，口感刚刚好', '鲜香满足，每一口都很治愈', '好吃到想马上再来一份', '风味满分，值得慢慢品尝', '热乎上桌，幸福感拉满'];
+  const description = descriptions[Math.floor(Math.random() * descriptions.length)];
+  const message = $('#egg-mascot-message');
+  const link = document.createElement('a');
+  link.href = `/?dish=${encodeURIComponent(item.id)}`;
+  link.textContent = item.name;
+  message.replaceChildren('今天推荐 ', link, `，${description}，快来尝尝吧！`);
 }
 async function loadCustomerSession() {
   if (!state.token) return updateCustomerAccount();
@@ -40,6 +70,7 @@ async function loadMenu() {
     renderCategories();
     renderMenu();
     renderCart();
+    renderEggMascot();
   } catch {
     $('#menu-grid').innerHTML = '<p class="no-results">菜单暂时走丢了，请刷新重试</p>';
   }
@@ -190,13 +221,8 @@ async function checkout() {
     });
     const data = await response.json();
     if (!response.ok) throw new Error(data.error || '下单失败');
-    state.cart.clear();
     localStorage.removeItem('mifan-cart');
-    renderMenu(); renderCart(); openCart(false);
-    $('#success-copy').textContent = `订单号 ${data.order.id}，预计 ${data.order.estimatedMinutes} 分钟准备完成。`;
-    $('#order-share-link').value = `${location.origin}/admin.html?order=${encodeURIComponent(data.order.id)}`;
-    $('#success-modal').classList.add('open');
-    $('#success-modal').setAttribute('aria-hidden', 'false');
+    window.location.reload();
   } catch (error) {
     toast(error.message);
   } finally {
@@ -231,7 +257,16 @@ $('#copy-order-link').addEventListener('click', async () => {
   try { await copyText($('#order-share-link').value); toast('商家处理链接已复制'); }
   catch { $('#order-share-link').focus(); $('#order-share-link').select(); toast('请长按链接后复制'); }
 });
-$('#customer-account').addEventListener('click', () => { if (state.user) toast(`已登录：${state.user.username}`); else openCustomerAuth(true); });
+$('#customer-account').addEventListener('click', () => openCustomerMenu($('#customer-menu').hidden));
+$('#customer-login').addEventListener('click', () => { openCustomerMenu(false); openCustomerAuth(true); });
+$('#customer-logout').addEventListener('click', async () => {
+  try {
+    const response = await fetch('/api/auth/logout', { method: 'POST', headers: authHeaders() });
+    if (!response.ok) throw new Error('退出登录失败');
+    state.token = ''; state.user = null; localStorage.removeItem('mifan-customer-token');
+    window.location.reload();
+  } catch (error) { toast(error.message); }
+});
 $('#customer-auth-close').addEventListener('click', () => openCustomerAuth(false));
 $('#customer-auth-form').addEventListener('submit', async (event) => {
   event.preventDefault();
@@ -245,7 +280,14 @@ $('#customer-auth-form').addEventListener('submit', async (event) => {
     else toast('登录成功，现在可以点餐');
   } catch (error) { $('#customer-auth-error').textContent = error.message; }
 });
-document.addEventListener('keydown', (event) => { if (event.key === 'Escape') openCart(false); });
+$('#egg-mascot-toggle').addEventListener('click', () => {
+  state.mascotVisible = !state.mascotVisible;
+  localStorage.setItem('mifan-egg-mascot-visible', String(state.mascotVisible));
+  renderEggMascot();
+});
+document.addEventListener('click', (event) => { if (!event.target.closest('#customer-account, #customer-menu')) openCustomerMenu(false); });
+document.addEventListener('keydown', (event) => { if (event.key === 'Escape') { openCart(false); openCustomerMenu(false); } });
 
 loadCustomerSession();
+renderEggMascot();
 loadMenu();

@@ -31,7 +31,7 @@ test('达到免配送门槛后配送费为零', () => {
   if (order.subtotal >= menu.restaurant.freeDeliveryAt) assert.equal(order.deliveryFee, 0);
 });
 
-test('电话和地址均可选，自取订单不收配送费', () => {
+test('未填写电话和地址时使用默认值，自取订单不收配送费', () => {
   const order = calculateOrder({
     fulfillment: 'pickup',
     items: [{ id: firstItem.id, quantity: 1 }]
@@ -39,8 +39,8 @@ test('电话和地址均可选，自取订单不收配送费', () => {
 
   assert.equal(order.deliveryFee, 0);
   assert.equal(order.estimatedMinutes, 20);
-  assert.equal(order.contact, '');
-  assert.equal(order.address, '');
+  assert.equal(order.contact, '520-13134');
+  assert.equal(order.address, '汤臣一品');
 });
 
 test('后端拒绝未知商品和非法数量', () => {

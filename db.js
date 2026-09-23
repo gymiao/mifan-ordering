@@ -131,6 +131,11 @@ function getSession(token) {
   if (!session || !session.active || session.expires_at <= new Date().toISOString()) return null;
   return { id: session.id, username: session.username, role: session.role, expiresAt: session.expires_at };
 }
+function logout(token) {
+  if (!token) return false;
+  const tokenHash = crypto.createHash('sha256').update(token).digest('hex');
+  return db.prepare('DELETE FROM sessions WHERE token_hash = ?').run(tokenHash).changes > 0;
+}
 function listUsers() { return db.prepare('SELECT id,username,role,active,created_at FROM users ORDER BY id').all(); }
 function createUser(username, password, role) {
   if (!/^[A-Za-z0-9_-]{3,32}$/.test(username)) throw new Error('用户名需要 3 至 32 位字母、数字、下划线或短横线');
@@ -154,4 +159,4 @@ function updateUser(id, input) {
   return db.prepare('SELECT id,username,role,active,created_at FROM users WHERE id = ?').get(id);
 }
 
-module.exports = { db, insertOrder, getOrder, listOrders, listOrdersByUser, updateOrderStatus, login, getSession, listUsers, createUser, updateUser };
+module.exports = { db, insertOrder, getOrder, listOrders, listOrdersByUser, updateOrderStatus, login, getSession, logout, listUsers, createUser, updateUser };

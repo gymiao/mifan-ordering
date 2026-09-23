@@ -19,11 +19,16 @@
     </a>
     <button class="location" type="button" aria-label="选择门店">
       <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 21s7-5.1 7-12A7 7 0 1 0 5 9c0 6.9 7 12 7 12Zm0-9.5A2.5 2.5 0 1 1 12 6a2.5 2.5 0 0 1 0 5.5Z"/></svg>
-      <span>新天地店</span><span class="chevron">⌄</span>
+      <span>荷包蛋之家</span><span class="chevron">⌄</span>
     </button>
     <button class="icon-btn" id="customer-account" type="button" aria-label="登录">
       <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8Zm7 8a7 7 0 0 0-14 0"/></svg>
     </button>
+    <div class="customer-menu" id="customer-menu" hidden>
+      <p id="customer-menu-name"></p>
+      <button id="customer-login" type="button">登录</button>
+      <button id="customer-logout" type="button">退出登录</button>
+    </div>
     <a class="admin-link" href="/admin.html">商家后台 ↗</a>
   </header>
 
@@ -81,6 +86,12 @@
   <button class="floating-cart" id="floating-cart" type="button" aria-label="打开购物车">
     <span class="bag-icon">▱</span><span>查看餐篮</span><strong id="floating-total">¥0</strong><i id="cart-count">0</i>
   </button>
+
+  <aside class="egg-mascot" id="egg-mascot" aria-label="荷包蛋推荐">
+    <div class="egg-mascot-copy"><p class="egg-mascot-title">荷包蛋看板娘</p><p id="egg-mascot-message"></p></div>
+    <span class="egg-mascot-face" aria-hidden="true">🍳</span>
+    <button class="egg-mascot-toggle" id="egg-mascot-toggle" type="button" aria-pressed="false">隐藏</button>
+  </aside>
 
   <div class="toast" id="toast" role="status"></div>
   <div class="success-modal" id="success-modal" aria-hidden="true">

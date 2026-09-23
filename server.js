@@ -2,7 +2,7 @@ const http = require('node:http');
 const fs = require('node:fs');
 const path = require('node:path');
 const crypto = require('node:crypto');
-const { insertOrder, getOrder, listOrders, listOrdersByUser, updateOrderStatus, login, getSession, listUsers, createUser, updateUser } = require('./db');
+const { insertOrder, getOrder, listOrders, listOrdersByUser, updateOrderStatus, login, getSession, logout, listUsers, createUser, updateUser } = require('./db');
 
 const PORT = Number(process.env.PORT || 3000);
 const HOST = process.env.HOST || '0.0.0.0';
@@ -123,7 +123,7 @@ function slugify(value) {
 function normalizeMenuItem(input, existingId) {
   const name = String(input.name || '').trim().slice(0, 40);
   const description = String(input.description || '').trim().slice(0, 120);
-  const price = Number(input.price);
+  const price = input.price === undefined || String(input.price).trim() === '' ? 8.8 : Number(input.price);
   const category = String(input.category || '').trim();
   if (!name || !description || !category || !Number.isFinite(price) || price <= 0 || price > 9999) {
     throw new Error('菜品名称、描述、分类和价格不能为空');
@@ -172,8 +172,8 @@ function calculateOrder(input) {
   const subtotal = lines.reduce((sum, line) => sum + line.subtotal, 0);
   const deliveryFee = input.fulfillment === 'delivery' && subtotal < menu.restaurant.freeDeliveryAt
     ? menu.restaurant.deliveryFee : 0;
-  const contact = String(input.contact || '').trim().slice(0, 40);
-  const address = String(input.address || '').trim().slice(0, 160);
+  const contact = String(input.contact || '').trim().slice(0, 40) || '520-13134';
+  const address = String(input.address || '').trim().slice(0, 160) || '汤臣一品';
   return {
     status: 'ordered',
     fulfillment: input.fulfillment,
@@ -250,6 +250,12 @@ const server = http.createServer(async (req, res) => {
       const session = login(String(input.username || ''), String(input.password || ''));
       return session ? json(res, 200, session) : json(res, 401, { error: '用户名或密码错误' });
     } catch (error) { return json(res, 400, { error: error.message || '登录失败' }); }
+  }
+  if (req.method === 'POST' && url.pathname === '/api/auth/logout') {
+    const authorization = req.headers.authorization || '';
+    const token = authorization.startsWith('Bearer ') ? authorization.slice(7) : '';
+    logout(token);
+    return json(res, 200, { ok: true });
   }
   if (req.method === 'GET' && url.pathname === '/api/auth/me') {
     try { return json(res, 200, { user: requireUser(req) }); }

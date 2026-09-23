@@ -38,6 +38,7 @@ npm start
 | `GET` | `/api/health` | 健康检查 |
 | `GET` | `/api/menu` | 获取餐厅、分类和菜品 |
 | `POST` | `/api/auth/login` | 用户登录，返回会话令牌 |
+| `POST` | `/api/auth/logout` | 退出当前登录会话 |
 | `POST` | `/api/admin/menu` | 新增菜品，需要管理员会话 |
 | `PUT` | `/api/admin/menu/:id` | 编辑或上下架菜品，需要管理员会话 |
 | `DELETE` | `/api/admin/menu/:id` | 删除菜品，需要管理员会话 |

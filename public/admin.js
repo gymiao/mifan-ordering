@@ -12,15 +12,32 @@ async function api(path, options = {}) {
 }
 
 async function load() {
-  try { state.menu = await api('/api/menu'); render(); if (!state.token) $('#token-modal').classList.add('open'); else { $('#token-modal').classList.remove('open'); await loadOrders(); } }
-  catch (error) { if (error.message.includes('身份验证') || error.message.includes('ADMIN_TOKEN')) $('#token-modal').classList.add('open'); else showToast(error.message); }
+  try {
+    state.menu = await api('/api/menu');
+    render();
+    if (!state.token) { $('#token-modal').classList.add('open'); return; }
+    await loadOrders();
+    await loadUsers();
+    $('#token-error').textContent = '';
+    $('#token-modal').classList.remove('open');
+  } catch (error) {
+    $('#token-error').textContent = error.message;
+    $('#token-modal').classList.add('open');
+  }
+}
+
+async function loadUsers() {
+  const data = await api('/api/admin/users');
+  $('#user-list').innerHTML = data.users.map((user) => `<tr><td><strong>${user.username}</strong></td><td>${user.role === 'admin' ? '管理员' : '普通用户'}</td><td><button class="pill ${user.active ? 'on' : ''}" data-user-toggle="${user.id}" ${user.username === 'root' ? 'disabled' : ''}>${user.active ? '启用' : '停用'}</button></td><td><small>${new Date(user.created_at).toLocaleString('zh-CN', { hour12: false })}</small></td><td>${user.username === 'root' ? '系统管理员' : ''}</td></tr>`).join('') || '<tr><td colspan="5" class="loading">暂无用户</td></tr>';
+  return data.users;
 }
 
 const statusText = { ordered: '已下单', cooking: '正在做', completed: '已完成' };
 async function loadOrders() {
   const status = $('#order-status').value;
-  try { const data = await api(`/api/admin/orders?status=${status}`); renderOrders(data.orders); }
-  catch (error) { $('#order-list').innerHTML = `<tr><td colspan="6" class="loading">${error.message}</td></tr>`; }
+  const data = await api(`/api/admin/orders?status=${status}`);
+  renderOrders(data.orders);
+  return data.orders;
 }
 
 function renderOrders(orders) {
@@ -51,15 +68,22 @@ function openEditor(item) {
 }
 function closeEditor() { $('#modal').classList.remove('open'); $('#modal').setAttribute('aria-hidden', 'true'); }
 function showToast(message) { const el = $('#toast'); el.textContent = message; el.classList.add('show'); setTimeout(() => el.classList.remove('show'), 2200); }
-async function shareLink(title, url) { try { if (navigator.share) await navigator.share({ title, url }); else { await navigator.clipboard.writeText(url); showToast('链接已复制'); } } catch (error) { if (error.name !== 'AbortError') showToast('无法复制链接'); } }
+async function copyText(value) { if (navigator.clipboard && window.isSecureContext) { await navigator.clipboard.writeText(value); return; } const textarea = document.createElement('textarea'); textarea.value = value; textarea.setAttribute('readonly', ''); textarea.style.cssText = 'position:fixed;opacity:0;pointer-events:none'; document.body.append(textarea); textarea.select(); const copied = document.execCommand('copy'); textarea.remove(); if (!copied) throw new Error('复制失败'); }
+function openDishShare(item) { $('#dish-share-title').textContent = `分享：${item.name}`; $('#dish-share-link').value = `${location.origin}/?dish=${encodeURIComponent(item.id)}`; $('#dish-share-modal').classList.add('open'); $('#dish-share-modal').setAttribute('aria-hidden', 'false'); }
+function closeDishShare() { $('#dish-share-modal').classList.remove('open'); $('#dish-share-modal').setAttribute('aria-hidden', 'true'); }
 
-$('#token-form').addEventListener('submit', (event) => { event.preventDefault(); state.token = $('#token').value; sessionStorage.setItem('mifan-admin-token', state.token); load(); });
+$('#token-form').addEventListener('submit', async (event) => { event.preventDefault(); $('#token-error').textContent = ''; try { const response = await fetch('/api/auth/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ username: $('#username').value, password: $('#password').value }) }); const data = await response.json(); if (!response.ok) throw new Error(data.error || '登录失败'); state.token = data.token; sessionStorage.setItem('mifan-admin-token', state.token); await load(); } catch (error) { $('#token-error').textContent = error.message; } });
 $('#new-item').addEventListener('click', () => openEditor()); $('#cancel').addEventListener('click', closeEditor); $('#cancel-bottom').addEventListener('click', closeEditor);
+$('#close-share').addEventListener('click', closeDishShare);
+$('#copy-dish-link').addEventListener('click', async () => { try { await copyText($('#dish-share-link').value); showToast('菜品链接已复制'); } catch { $('#dish-share-link').focus(); $('#dish-share-link').select(); showToast('请长按链接后复制'); } });
+$('#native-share').addEventListener('click', async () => { try { if (navigator.share) await navigator.share({ title: $('#dish-share-title').textContent, url: $('#dish-share-link').value }); else await copyText($('#dish-share-link').value); showToast(navigator.share ? '已打开系统分享' : '菜品链接已复制'); } catch (error) { if (error.name !== 'AbortError') showToast('请使用复制链接分享'); } });
 $('#filter').addEventListener('input', render); $('#category-filter').addEventListener('change', render);
 $('#order-status').addEventListener('change', loadOrders);
+$('#user-form').addEventListener('submit', async (event) => { event.preventDefault(); const data = Object.fromEntries(new FormData(event.target)); try { await api('/api/admin/users', { method: 'POST', body: JSON.stringify(data) }); event.target.reset(); await loadUsers(); showToast('用户已创建'); } catch (error) { showToast(error.message); } });
 $('#item-form').addEventListener('submit', async (event) => { event.preventDefault(); const form = new FormData(event.target); const body = Object.fromEntries(form.entries()); body.price = Number(body.price); body.tags = String(body.tags || '').split(',').map((tag) => tag.trim()).filter(Boolean); body.available = form.has('available'); $('#save').disabled = true; try { const file = form.get('image'); let imageUrl = form.get('imageUrl') || ''; if (file && file.size) { $('#image-tip').textContent = '图片上传中…'; const uploadData = new FormData(); uploadData.append('image', file); const uploaded = await api('/api/admin/uploads', { method: 'POST', body: uploadData }); imageUrl = uploaded.url; } delete body.imageUrl; body.image = imageUrl; await api(state.editing ? `/api/admin/menu/${state.editing}` : '/api/admin/menu', { method: state.editing ? 'PUT' : 'POST', body: JSON.stringify(body) }); closeEditor(); await load(); showToast('菜单已保存'); } catch (error) { $('#form-error').textContent = error.message; } finally { $('#save').disabled = false; } });
 
-$('#item-list').addEventListener('click', async (event) => { const edit = event.target.closest('[data-edit]'); const remove = event.target.closest('[data-delete]'); const toggle = event.target.closest('[data-toggle]'); const share = event.target.closest('[data-share-dish]'); try { if (edit) openEditor(state.menu.items.find((item) => item.id === edit.dataset.edit)); if (share) { const item = state.menu.items.find((entry) => entry.id === share.dataset.shareDish); await shareLink(item.name, `${location.origin}/?dish=${encodeURIComponent(item.id)}`); } if (remove && confirm('确认删除这道菜品吗？')) { await api(`/api/admin/menu/${remove.dataset.delete}`, { method: 'DELETE' }); await load(); showToast('菜品已删除'); } if (toggle) { const item = state.menu.items.find((entry) => entry.id === toggle.dataset.toggle); await api(`/api/admin/menu/${item.id}`, { method: 'PUT', body: JSON.stringify({ ...item, available: !item.available }) }); await load(); showToast(item.available ? '菜品已下架' : '菜品已上架'); } } catch (error) { showToast(error.message); } });
+$('#item-list').addEventListener('click', async (event) => { const edit = event.target.closest('[data-edit]'); const remove = event.target.closest('[data-delete]'); const toggle = event.target.closest('[data-toggle]'); const share = event.target.closest('[data-share-dish]'); try { if (edit) openEditor(state.menu.items.find((item) => item.id === edit.dataset.edit)); if (share) openDishShare(state.menu.items.find((entry) => entry.id === share.dataset.shareDish)); if (remove && confirm('确认删除这道菜品吗？')) { await api(`/api/admin/menu/${remove.dataset.delete}`, { method: 'DELETE' }); await load(); showToast('菜品已删除'); } if (toggle) { const item = state.menu.items.find((entry) => entry.id === toggle.dataset.toggle); await api(`/api/admin/menu/${item.id}`, { method: 'PUT', body: JSON.stringify({ ...item, available: !item.available }) }); await load(); showToast(item.available ? '菜品已下架' : '菜品已上架'); } } catch (error) { showToast(error.message); } });
 $('#order-list').addEventListener('change', async (event) => { const select = event.target.closest('[data-order-status]'); if (!select) return; try { await api(`/api/admin/orders/${select.dataset.orderStatus}/status`, { method: 'PATCH', body: JSON.stringify({ status: select.value }) }); showToast('订单状态已更新'); await loadOrders(); } catch (error) { showToast(error.message); await loadOrders(); } });
-setInterval(() => { if (state.token && !document.hidden) loadOrders(); }, 10000);
+$('#user-list').addEventListener('click', async (event) => { const button = event.target.closest('[data-user-toggle]'); if (!button) return; try { const active = !button.classList.contains('on'); await api(`/api/admin/users/${button.dataset.userToggle}`, { method: 'PATCH', body: JSON.stringify({ active }) }); await loadUsers(); showToast(active ? '用户已启用' : '用户已停用'); } catch (error) { showToast(error.message); } });
+setInterval(() => { if (state.token && !document.hidden) loadOrders().catch(() => {}); }, 10000);
 load();

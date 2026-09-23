@@ -1,4 +1,4 @@
-# 米饭食堂点餐系统
+# 荷包蛋餐厅点餐系统
 
 一个可直接运行的前后端点餐 MVP。前端使用原生 HTML/CSS/JavaScript，后端使用 Node.js HTTP 服务和 SQLite 数据库，适合快速验证和低成本部署。
 
@@ -27,7 +27,7 @@ npm start
 - 订单中心支持按状态筛选、按下单时间倒序显示和状态更新
 - 顾客页与商家后台互相提供入口；下单和菜品都支持深链接分享
 - 管理后台支持 JPG、PNG、WebP 餐品图片上传，单张最大 8MB
-- 管理写接口使用 `ADMIN_TOKEN` 鉴权，菜单公开接口保持只读
+- 管理后台使用账户登录，菜单公开接口保持只读
 
 测试文件位于 `test/`，覆盖菜单契约、订单核心规则和管理员菜品数据校验，可在具备 Node.js 20+ 的 CI 或服务器环境中执行 `npm test`。
 
@@ -37,10 +37,11 @@ npm start
 | --- | --- | --- |
 | `GET` | `/api/health` | 健康检查 |
 | `GET` | `/api/menu` | 获取餐厅、分类和菜品 |
-| `POST` | `/api/admin/menu` | 新增菜品，需要 `Authorization: Bearer <ADMIN_TOKEN>` |
-| `PUT` | `/api/admin/menu/:id` | 编辑或上下架菜品，需要管理员令牌 |
-| `DELETE` | `/api/admin/menu/:id` | 删除菜品，需要管理员令牌 |
-| `POST` | `/api/admin/uploads` | 上传餐品图片，需要管理员令牌 |
+| `POST` | `/api/auth/login` | 用户登录，返回会话令牌 |
+| `POST` | `/api/admin/menu` | 新增菜品，需要管理员会话 |
+| `PUT` | `/api/admin/menu/:id` | 编辑或上下架菜品，需要管理员会话 |
+| `DELETE` | `/api/admin/menu/:id` | 删除菜品，需要管理员会话 |
+| `POST` | `/api/admin/uploads` | 上传餐品图片，需要管理员会话 |
 | `POST` | `/api/orders` | 创建订单，价格以后端为准 |
 | `GET` | `/api/orders/:id` | 查询单个订单 |
 | `GET` | `/api/admin/orders?status=all` | 管理员查看订单，需要管理员令牌 |
@@ -99,11 +100,10 @@ Node.js 应用（2 个或更多实例）
 ## Docker 内测部署
 
 ```bash
-export ADMIN_TOKEN='请替换为随机长字符串'
 docker compose up -d --build
 curl http://127.0.0.1:3000/api/health
 ```
 
-菜单后台地址为 `https://你的域名/admin.html`。管理员令牌只通过服务器环境变量配置，不写入仓库；后台浏览器仅保存在当前会话的 `sessionStorage` 中。
+菜单后台地址为 `https://你的域名/admin.html`。初始管理员是 `root`，初始密码是 `kgjy`；初始普通用户是 `user`，初始密码也是 `kgjy`。首次登录后请在“用户管理”中创建自己的管理员账户并更换默认密码。后台会话只保存在当前浏览器会话中。
 
 复制 `deploy/nginx.conf` 到服务器 Nginx 配置目录，替换其中的域名，再用 Certbot 或云厂商证书启用 HTTPS。`order-data` 卷用于保留订单文件；升级到 PostgreSQL 后应删除文件存储并把数据库凭据放入服务器环境变量。

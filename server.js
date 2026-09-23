@@ -2,7 +2,7 @@ const http = require('node:http');
 const fs = require('node:fs');
 const path = require('node:path');
 const crypto = require('node:crypto');
-const { insertOrder, getOrder, listOrders, updateOrderStatus } = require('./db');
+const { insertOrder, getOrder, listOrders, updateOrderStatus, login, getSession, listUsers, createUser, updateUser } = require('./db');
 
 const PORT = Number(process.env.PORT || 3000);
 const HOST = process.env.HOST || '0.0.0.0';
@@ -97,9 +97,20 @@ function persistMenu() {
 }
 
 function requireAdmin(req) {
-  if (!ADMIN_TOKEN) throw new Error('服务端尚未配置 ADMIN_TOKEN');
   const authorization = req.headers.authorization || '';
-  if (authorization !== `Bearer ${ADMIN_TOKEN}`) throw new Error('管理员身份验证失败');
+  const token = authorization.startsWith('Bearer ') ? authorization.slice(7) : '';
+  if (ADMIN_TOKEN && token === ADMIN_TOKEN) return { username: 'legacy-admin', role: 'admin' };
+  const user = getSession(token);
+  if (!user || user.role !== 'admin') throw new Error('管理员身份验证失败');
+  return user;
+}
+
+function requireUser(req) {
+  const authorization = req.headers.authorization || '';
+  const token = authorization.startsWith('Bearer ') ? authorization.slice(7) : '';
+  const user = getSession(token);
+  if (!user) throw new Error('用户身份验证失败');
+  return user;
 }
 
 function slugify(value) {
@@ -127,7 +138,6 @@ function normalizeMenuItem(input, existingId) {
     description,
     image: typeof input.image === 'string' && input.image.startsWith('/uploads/') ? input.image.slice(0, 180) : '',
     price: Math.round(price * 100) / 100,
-    rating: Number.isFinite(Number(input.rating)) ? Math.max(0, Math.min(5, Number(input.rating))) : 5,
     sales: Number.isInteger(Number(input.sales)) ? Math.max(0, Number(input.sales)) : 0,
     emoji: String(input.emoji || '🍱').slice(0, 4),
     color: /^#[0-9a-f]{6}$/i.test(input.color || '') ? input.color : '#7da66a',
@@ -232,6 +242,36 @@ const server = http.createServer(async (req, res) => {
   if (req.method === 'GET' && url.pathname === '/api/menu') {
     return json(res, 200, menu, { 'Cache-Control': 'public, max-age=60, stale-while-revalidate=300' });
   }
+  if (req.method === 'POST' && url.pathname === '/api/auth/login') {
+    try {
+      const input = await readBody(req);
+      const session = login(String(input.username || ''), String(input.password || ''));
+      return session ? json(res, 200, session) : json(res, 401, { error: '用户名或密码错误' });
+    } catch (error) { return json(res, 400, { error: error.message || '登录失败' }); }
+  }
+  if (req.method === 'GET' && url.pathname === '/api/auth/me') {
+    try { return json(res, 200, { user: requireUser(req) }); }
+    catch (error) { return json(res, 401, { error: error.message }); }
+  }
+  if (req.method === 'GET' && url.pathname === '/api/admin/users') {
+    try { requireAdmin(req); return json(res, 200, { users: listUsers() }); }
+    catch (error) { return adminError(res, error); }
+  }
+  if (req.method === 'POST' && url.pathname === '/api/admin/users') {
+    try {
+      requireAdmin(req);
+      const input = await readBody(req);
+      return json(res, 201, { user: createUser(String(input.username || ''), String(input.password || ''), input.role) });
+    } catch (error) { return adminError(res, error); }
+  }
+  const adminUserMatch = url.pathname.match(/^\/api\/admin\/users\/(\d+)$/);
+  if (req.method === 'PATCH' && adminUserMatch) {
+    try {
+      requireAdmin(req);
+      const user = updateUser(Number(adminUserMatch[1]), await readBody(req));
+      return user ? json(res, 200, { user }) : json(res, 404, { error: '用户不存在' });
+    } catch (error) { return adminError(res, error); }
+  }
   if (req.method === 'POST' && url.pathname === '/api/admin/uploads') {
     try {
       requireAdmin(req);
@@ -306,7 +346,7 @@ const server = http.createServer(async (req, res) => {
 
 if (require.main === module) {
   server.listen(PORT, HOST, () => {
-    console.log(`米饭食堂已启动：http://${HOST}:${PORT}`);
+    console.log(`荷包蛋餐厅已启动：http://${HOST}:${PORT}`);
   });
 }
 

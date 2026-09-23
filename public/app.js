@@ -53,7 +53,7 @@ function renderMenu() {
         ${item.image ? `<span class="image-loading-label">图片加载中…</span><img class="dish-image" src="${item.image}" alt="${item.name}" loading="lazy"><span class="dish-emoji image-fallback" hidden>${item.emoji}</span>` : `<span class="dish-emoji">${item.emoji}</span>`}
       </div>
       <div class="dish-info">
-        <div class="dish-title-row"><h3>${item.name}</h3><span class="rating">★ ${item.rating}</span></div>
+        <div class="dish-title-row"><h3>${item.name}</h3></div>
         <p class="dish-description">${item.description}</p>
         <div class="dish-bottom"><span class="price">${money(item.price)}</span>${quantityControl(item)}</div>
       </div>
@@ -116,7 +116,6 @@ function renderCart() {
   $('#checkout-total').textContent = money(total);
   $('#checkout').disabled = count === 0;
   $('#floating-cart').classList.toggle('visible', count > 0);
-  $('#address').hidden = state.fulfillment === 'pickup';
 }
 
 function openCart(open) {
@@ -134,6 +133,22 @@ function toast(message) {
   toastTimer = setTimeout(() => element.classList.remove('show'), 2200);
 }
 
+async function copyText(value) {
+  if (navigator.clipboard && window.isSecureContext) {
+    await navigator.clipboard.writeText(value);
+    return;
+  }
+  const textarea = document.createElement('textarea');
+  textarea.value = value;
+  textarea.setAttribute('readonly', '');
+  textarea.style.cssText = 'position:fixed;opacity:0;pointer-events:none';
+  document.body.append(textarea);
+  textarea.select();
+  const copied = document.execCommand('copy');
+  textarea.remove();
+  if (!copied) throw new Error('复制失败');
+}
+
 async function checkout() {
   const button = $('#checkout');
   button.disabled = true;
@@ -145,8 +160,8 @@ async function checkout() {
       body: JSON.stringify({
         items: [...state.cart].map(([id, quantity]) => ({ id, quantity })),
         fulfillment: state.fulfillment,
-        contact: $('#contact').value,
-        address: $('#address').value,
+        contact: '',
+        address: '',
         note: $('#note').value
       })
     });
@@ -190,8 +205,8 @@ $('#success-close').addEventListener('click', () => {
   $('#success-modal').setAttribute('aria-hidden', 'true');
 });
 $('#copy-order-link').addEventListener('click', async () => {
-  try { await navigator.clipboard.writeText($('#order-share-link').value); toast('商家处理链接已复制'); }
-  catch { $('#order-share-link').select(); document.execCommand('copy'); toast('商家处理链接已复制'); }
+  try { await copyText($('#order-share-link').value); toast('商家处理链接已复制'); }
+  catch { $('#order-share-link').focus(); $('#order-share-link').select(); toast('请长按链接后复制'); }
 });
 document.addEventListener('keydown', (event) => { if (event.key === 'Escape') openCart(false); });
 

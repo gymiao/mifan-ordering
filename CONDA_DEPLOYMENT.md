@@ -2,6 +2,34 @@
 
 适用于 Ubuntu 服务器。项目使用 Node.js，Conda 用来隔离 Node.js 运行环境，systemd 负责常驻，Nginx 负责对外访问。
 
+## 已部署服务器更新
+
+如果服务器已经部署过旧版本，按下面顺序更新。该流程会保留订单、菜单和餐品图片：
+
+```bash
+cd /srv/mifan-ordering
+
+# 备份现有业务数据
+backup_dir="/srv/mifan-backups/$(date +%F-%H%M%S)"
+mkdir -p "$backup_dir"
+cp -a data/menu.json "$backup_dir/"
+cp -a data/mifan.sqlite "$backup_dir/" 2>/dev/null || true
+cp -a data/uploads "$backup_dir/" 2>/dev/null || true
+
+# 拉取代码与安装 SQLite 依赖
+git pull --ff-only origin main
+source "$(conda info --base)/etc/profile.d/conda.sh"
+conda activate mifan-node
+npm install --omit=dev
+
+# 重启并验证
+systemctl restart mifan-ordering
+systemctl status mifan-ordering --no-pager
+curl http://127.0.0.1:3000/api/health
+```
+
+新版会自动创建 `data/mifan.sqlite`。旧版本的 `data/orders.json` 不会被删除；确认 SQLite 中已有新订单后再保留或归档旧文件。
+
 ## 1. 安装系统组件
 
 ```bash
@@ -75,14 +103,13 @@ nano /etc/mifan-ordering.env
 NODE_ENV=production
 HOST=127.0.0.1
 PORT=3000
-ADMIN_TOKEN=替换成随机长字符串
 ```
 
 ```bash
 chmod 600 /etc/mifan-ordering.env
 ```
 
-不要把这个文件提交到 GitHub。
+不要把这个文件提交到 GitHub。后台初始管理员为 `root` / `kgjy`，初始普通用户为 `user` / `kgjy`；首次登录后请创建新的管理员账户并修改默认密码。
 
 ## 5. 创建 systemd 服务
 

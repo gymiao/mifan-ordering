@@ -1,6 +1,6 @@
 {
   "restaurant": {
-    "name": "米饭食堂",
+    "name": "荷包蛋餐厅",
     "tagline": "认真吃饭，好好生活",
     "notice": "现点现做，高峰期预计 25–35 分钟",
     "minimumOrder": 0,
@@ -14,16 +14,16 @@
     { "id": "drink", "name": "清爽饮品" }
   ],
   "items": [
-    { "id": "beef-rice", "category": "popular", "name": "炙烤肥牛饭", "description": "谷饲肥牛、温泉蛋、秘制洋葱汁", "price": 32, "rating": 4.9, "sales": 328, "emoji": "🥩", "color": "#ef8354", "tags": ["招牌", "微辣"], "available": true },
-    { "id": "chicken-rice", "category": "popular", "name": "照烧鸡腿饭", "description": "去骨鸡腿、溏心蛋、时蔬", "price": 28, "rating": 4.8, "sales": 286, "emoji": "🍗", "color": "#e9ad52", "tags": ["热销"], "available": true },
-    { "id": "salmon-bowl", "category": "popular", "name": "炙烧三文鱼碗", "description": "三文鱼、牛油果、玉子、寿司饭", "price": 42, "rating": 4.9, "sales": 168, "emoji": "🍣", "color": "#ed927f", "tags": ["新品"], "available": true },
-    { "id": "pork-rice", "category": "main", "name": "台式卤肉饭", "description": "慢炖五花肉、卤蛋、酸甜萝卜", "price": 24, "rating": 4.7, "sales": 412, "emoji": "🍛", "color": "#bc6c46", "tags": ["经典"], "available": true },
-    { "id": "curry-rice", "category": "main", "name": "咖喱炸猪排饭", "description": "厚切猪排、日式咖喱、卷心菜", "price": 31, "rating": 4.8, "sales": 221, "emoji": "🍱", "color": "#d49a34", "tags": ["酥脆"], "available": true },
-    { "id": "veggie-bowl", "category": "main", "name": "五色能量碗", "description": "南瓜、鹰嘴豆、藜麦、时令蔬菜", "price": 26, "rating": 4.7, "sales": 96, "emoji": "🥗", "color": "#7da66a", "tags": ["素食"], "available": true },
-    { "id": "wings", "category": "snack", "name": "蜂蜜芥末鸡翅", "description": "外酥里嫩，一份 4 只", "price": 18, "rating": 4.8, "sales": 255, "emoji": "🍗", "color": "#d45f42", "tags": ["推荐"], "available": true },
-    { "id": "fries", "category": "snack", "name": "海苔薯角", "description": "现炸薯角、海苔椒盐", "price": 12, "rating": 4.6, "sales": 190, "emoji": "🍟", "color": "#deb34b", "tags": [], "available": true },
-    { "id": "edamame", "category": "snack", "name": "椒盐毛豆", "description": "清爽开胃，低卡小食", "price": 9, "rating": 4.5, "sales": 88, "emoji": "🫛", "color": "#77a864", "tags": ["低卡"], "available": true },
-    { "id": "plum-soda", "category": "drink", "name": "青梅气泡水", "description": "酸甜青梅、冰爽气泡", "price": 10, "rating": 4.8, "sales": 203, "emoji": "🥤", "color": "#74aaa2", "tags": ["冰饮"], "available": true },
-    { "id": "tea", "category": "drink", "name": "桂花乌龙茶", "description": "低糖茶饮，桂花清香", "price": 8, "rating": 4.7, "sales": 176, "emoji": "🍵", "color": "#9b9a59", "tags": ["低糖"], "available": true }
+    { "id": "beef-rice", "category": "popular", "name": "炙烤肥牛饭", "description": "谷饲肥牛、温泉蛋、秘制洋葱汁", "price": 32, "sales": 328, "emoji": "🥩", "color": "#ef8354", "tags": ["招牌", "微辣"], "available": true },
+    { "id": "chicken-rice", "category": "popular", "name": "照烧鸡腿饭", "description": "去骨鸡腿、溏心蛋、时蔬", "price": 28, "sales": 286, "emoji": "🍗", "color": "#e9ad52", "tags": ["热销"], "available": true },
+    { "id": "salmon-bowl", "category": "popular", "name": "炙烧三文鱼碗", "description": "三文鱼、牛油果、玉子、寿司饭", "price": 42, "sales": 168, "emoji": "🍣", "color": "#ed927f", "tags": ["新品"], "available": true },
+    { "id": "pork-rice", "category": "main", "name": "台式卤肉饭", "description": "慢炖五花肉、卤蛋、酸甜萝卜", "price": 24, "sales": 412, "emoji": "🍛", "color": "#bc6c46", "tags": ["经典"], "available": true },
+    { "id": "curry-rice", "category": "main", "name": "咖喱炸猪排饭", "description": "厚切猪排、日式咖喱、卷心菜", "price": 31, "sales": 221, "emoji": "🍱", "color": "#d49a34", "tags": ["酥脆"], "available": true },
+    { "id": "veggie-bowl", "category": "main", "name": "五色能量碗", "description": "南瓜、鹰嘴豆、藜麦、时令蔬菜", "price": 26, "sales": 96, "emoji": "🥗", "color": "#7da66a", "tags": ["素食"], "available": true },
+    { "id": "wings", "category": "snack", "name": "蜂蜜芥末鸡翅", "description": "外酥里嫩，一份 4 只", "price": 18, "sales": 255, "emoji": "🍗", "color": "#d45f42", "tags": ["推荐"], "available": true },
+    { "id": "fries", "category": "snack", "name": "海苔薯角", "description": "现炸薯角、海苔椒盐", "price": 12, "sales": 190, "emoji": "🍟", "color": "#deb34b", "tags": [], "available": true },
+    { "id": "edamame", "category": "snack", "name": "椒盐毛豆", "description": "清爽开胃，低卡小食", "price": 9, "sales": 88, "emoji": "🫛", "color": "#77a864", "tags": ["低卡"], "available": true },
+    { "id": "plum-soda", "category": "drink", "name": "青梅气泡水", "description": "酸甜青梅、冰爽气泡", "price": 10, "sales": 203, "emoji": "🥤", "color": "#74aaa2", "tags": ["冰饮"], "available": true },
+    { "id": "tea", "category": "drink", "name": "桂花乌龙茶", "description": "低糖茶饮，桂花清香", "price": 8, "sales": 176, "emoji": "🍵", "color": "#9b9a59", "tags": ["低糖"], "available": true }
   ]
 }

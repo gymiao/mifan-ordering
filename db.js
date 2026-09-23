@@ -1,5 +1,6 @@
 const path = require('node:path');
 const fs = require('node:fs');
+const crypto = require('node:crypto');
 const Database = require('better-sqlite3');
 
 const dataDir = path.join(__dirname, 'data');
@@ -32,7 +33,39 @@ db.exec(`
   );
   CREATE INDEX IF NOT EXISTS idx_orders_status_created ON orders(status, created_at DESC);
   CREATE INDEX IF NOT EXISTS idx_order_items_order ON order_items(order_id);
+  CREATE TABLE IF NOT EXISTS users (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    username TEXT NOT NULL UNIQUE,
+    password_hash TEXT NOT NULL,
+    role TEXT NOT NULL CHECK(role IN ('admin', 'user')),
+    active INTEGER NOT NULL DEFAULT 1,
+    created_at TEXT NOT NULL
+  );
+  CREATE TABLE IF NOT EXISTS sessions (
+    token_hash TEXT PRIMARY KEY,
+    user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    expires_at TEXT NOT NULL,
+    created_at TEXT NOT NULL
+  );
+  CREATE INDEX IF NOT EXISTS idx_sessions_expires ON sessions(expires_at);
 `);
+
+function passwordHash(password, salt = crypto.randomBytes(16).toString('hex')) {
+  return `${salt}:${crypto.scryptSync(password, salt, 64).toString('hex')}`;
+}
+function verifyPassword(password, saved) {
+  const [salt, expected] = String(saved).split(':');
+  if (!salt || !expected) return false;
+  const actual = crypto.scryptSync(password, salt, 64).toString('hex');
+  return crypto.timingSafeEqual(Buffer.from(actual, 'hex'), Buffer.from(expected, 'hex'));
+}
+function seedUsers() {
+  const insert = db.prepare('INSERT OR IGNORE INTO users (username,password_hash,role,created_at) VALUES (?,?,?,?)');
+  const now = new Date().toISOString();
+  insert.run('root', passwordHash('kgjy'), 'admin', now);
+  insert.run('user', passwordHash('kgjy'), 'user', now);
+}
+seedUsers();
 
 const insertOrder = db.transaction((order) => {
   db.prepare(`INSERT INTO orders (id,status,fulfillment,contact,address,note,subtotal,delivery_fee,total,estimated_minutes,created_at)
@@ -69,4 +102,46 @@ function updateOrderStatus(id, status) {
   return result.changes ? getOrder(id) : null;
 }
 
-module.exports = { db, insertOrder, getOrder, listOrders, updateOrderStatus };
+function login(username, password) {
+  const user = db.prepare('SELECT * FROM users WHERE username = ? AND active = 1').get(username);
+  if (!user || !verifyPassword(password, user.password_hash)) return null;
+  db.prepare('DELETE FROM sessions WHERE expires_at <= ?').run(new Date().toISOString());
+  const rawToken = crypto.randomBytes(32).toString('base64url');
+  const tokenHash = crypto.createHash('sha256').update(rawToken).digest('hex');
+  const createdAt = new Date().toISOString();
+  const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
+  db.prepare('INSERT INTO sessions (token_hash,user_id,expires_at,created_at) VALUES (?,?,?,?)').run(tokenHash, user.id, expiresAt, createdAt);
+  return { token: rawToken, user: { id: user.id, username: user.username, role: user.role, expiresAt } };
+}
+function getSession(token) {
+  if (!token) return null;
+  const tokenHash = crypto.createHash('sha256').update(token).digest('hex');
+  const session = db.prepare(`SELECT users.id, users.username, users.role, users.active, sessions.expires_at
+    FROM sessions JOIN users ON users.id = sessions.user_id WHERE sessions.token_hash = ?`).get(tokenHash);
+  if (!session || !session.active || session.expires_at <= new Date().toISOString()) return null;
+  return { id: session.id, username: session.username, role: session.role, expiresAt: session.expires_at };
+}
+function listUsers() { return db.prepare('SELECT id,username,role,active,created_at FROM users ORDER BY id').all(); }
+function createUser(username, password, role) {
+  if (!/^[A-Za-z0-9_-]{3,32}$/.test(username)) throw new Error('用户名需要 3 至 32 位字母、数字、下划线或短横线');
+  if (String(password).length < 4 || String(password).length > 128) throw new Error('密码长度需要为 4 至 128 位');
+  if (!['admin', 'user'].includes(role)) throw new Error('用户角色无效');
+  const result = db.prepare('INSERT INTO users (username,password_hash,role,created_at) VALUES (?,?,?,?)')
+    .run(username, passwordHash(password), role, new Date().toISOString());
+  return db.prepare('SELECT id,username,role,active,created_at FROM users WHERE id = ?').get(result.lastInsertRowid);
+}
+function updateUser(id, input) {
+  const user = db.prepare('SELECT * FROM users WHERE id = ?').get(id);
+  if (!user) return null;
+  const role = input.role === undefined ? user.role : input.role;
+  const active = input.active === undefined ? user.active : Number(Boolean(input.active));
+  if (!['admin', 'user'].includes(role)) throw new Error('用户角色无效');
+  if (user.username === 'root' && (!active || role !== 'admin')) throw new Error('系统管理员 root 不能被停用或降级');
+  if (input.password !== undefined && (String(input.password).length < 4 || String(input.password).length > 128)) throw new Error('密码长度需要为 4 至 128 位');
+  const hash = input.password === undefined ? user.password_hash : passwordHash(input.password);
+  db.prepare('UPDATE users SET password_hash = ?, role = ?, active = ? WHERE id = ?').run(hash, role, active, id);
+  if (!active) db.prepare('DELETE FROM sessions WHERE user_id = ?').run(id);
+  return db.prepare('SELECT id,username,role,active,created_at FROM users WHERE id = ?').get(id);
+}
+
+module.exports = { db, insertOrder, getOrder, listOrders, updateOrderStatus, login, getSession, listUsers, createUser, updateUser };

@@ -2,7 +2,7 @@ const http = require('node:http');
 const fs = require('node:fs');
 const path = require('node:path');
 const crypto = require('node:crypto');
-const { insertOrder, getOrder, listOrders, updateOrderStatus, login, getSession, listUsers, createUser, updateUser } = require('./db');
+const { insertOrder, getOrder, listOrders, listOrdersByUser, updateOrderStatus, login, getSession, listUsers, createUser, updateUser } = require('./db');
 
 const PORT = Number(process.env.PORT || 3000);
 const HOST = process.env.HOST || '0.0.0.0';
@@ -189,9 +189,11 @@ function calculateOrder(input) {
   };
 }
 
-function createOrder(input) {
+function createOrder(input, user) {
+  if (!user?.id) throw new Error('请先登录后再下单');
   const order = {
     id: `MF${Date.now().toString().slice(-8)}${crypto.randomInt(10, 99)}`,
+    userId: user.id,
     ...calculateOrder(input)
   };
   insertOrder(order);
@@ -329,16 +331,26 @@ const server = http.createServer(async (req, res) => {
   }
   if (req.method === 'POST' && url.pathname === '/api/orders') {
     try {
-      const order = createOrder(await readBody(req));
+      const order = createOrder(await readBody(req), requireUser(req));
       return json(res, 201, { order });
     } catch (error) {
       return json(res, 400, { error: error.message || '下单失败' });
     }
   }
+  if (req.method === 'GET' && url.pathname === '/api/orders/my') {
+    try {
+      const user = requireUser(req);
+      return json(res, 200, { orders: listOrdersByUser(user.id) });
+    } catch (error) { return json(res, 401, { error: error.message }); }
+  }
   const match = url.pathname.match(/^\/api\/orders\/([A-Za-z0-9-]+)$/);
   if (req.method === 'GET' && match) {
-    const order = getOrder(match[1]);
-    return order ? json(res, 200, { order }) : json(res, 404, { error: '订单不存在' });
+    try {
+      const user = requireUser(req);
+      const order = getOrder(match[1]);
+      if (!order || (user.role !== 'admin' && order.userId !== user.id)) return json(res, 404, { error: '订单不存在' });
+      return json(res, 200, { order });
+    } catch (error) { return json(res, 401, { error: error.message }); }
   }
   if (req.method === 'GET' || req.method === 'HEAD') return serveStatic(req, res, url.pathname);
   return json(res, 405, { error: '请求方法不支持' });

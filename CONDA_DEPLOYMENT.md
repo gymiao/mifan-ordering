@@ -4,7 +4,7 @@
 
 ## 已部署服务器更新
 
-如果服务器已经部署过旧版本，按下面顺序更新。该流程会保留订单、菜单和餐品图片：
+每次代码推送到 GitHub 后，在服务器执行以下内容。该流程会保留订单、菜单、用户账户和餐品图片。`git reset --hard origin/main` 会强制让服务器代码与 GitHub 的 `main` 分支一致，但不会删除 `data/` 中未被 Git 跟踪的业务数据。
 
 ```bash
 cd /srv/mifan-ordering
@@ -12,23 +12,28 @@ cd /srv/mifan-ordering
 # 备份现有业务数据
 backup_dir="/srv/mifan-backups/$(date +%F-%H%M%S)"
 mkdir -p "$backup_dir"
-cp -a data/menu.json "$backup_dir/"
+cp -a data/menu.json "$backup_dir/" 2>/dev/null || true
 cp -a data/mifan.sqlite "$backup_dir/" 2>/dev/null || true
 cp -a data/uploads "$backup_dir/" 2>/dev/null || true
 
-# 拉取代码与安装 SQLite 依赖
-git pull --ff-only origin main
+# 服务器本地代码强制对齐 GitHub main
+git fetch origin
+git reset --hard origin/main
+
+# 激活 Conda 环境并安装/更新依赖
 source "$(conda info --base)/etc/profile.d/conda.sh"
 conda activate mifan-node
 npm install --omit=dev
 
-# 重启并验证
+# 重启服务并检查后端
 systemctl restart mifan-ordering
 systemctl status mifan-ordering --no-pager
 curl http://127.0.0.1:3000/api/health
 ```
 
-新版会自动创建 `data/mifan.sqlite`。旧版本的 `data/orders.json` 不会被删除；确认 SQLite 中已有新订单后再保留或归档旧文件。
+预期健康检查返回包含 `"ok":true` 的 JSON。若 `npm install` 编译 `better-sqlite3` 失败，先执行 `apt update && apt install -y build-essential python3 make g++`，再重新执行 `npm install --omit=dev`。
+
+最后在浏览器检查首页和 `http://服务器IP/admin.html`：分别登录普通用户和管理员，创建一笔测试订单，并在后台确认订单出现及状态可更新。
 
 ## 1. 安装系统组件
 
@@ -80,16 +85,13 @@ cd /srv/mifan-ordering
 
 ```bash
 cd /srv/mifan-ordering
-git pull --ff-only
+git fetch origin
+git reset --hard origin/main
 ```
 
-## 4. 配置管理员令牌
+完整更新仍应使用文档开头的“已部署服务器更新”步骤，以便同时备份数据、安装依赖并重启服务。
 
-生成随机令牌：
-
-```bash
-openssl rand -hex 32
-```
+## 4. 配置运行环境
 
 创建配置文件：
 
@@ -97,7 +99,7 @@ openssl rand -hex 32
 nano /etc/mifan-ordering.env
 ```
 
-写入以下内容，把占位符替换成刚才生成的随机字符串：
+写入以下内容：
 
 ```env
 NODE_ENV=production
@@ -109,7 +111,7 @@ PORT=3000
 chmod 600 /etc/mifan-ordering.env
 ```
 
-不要把这个文件提交到 GitHub。后台初始管理员为 `root` / `kgjy`，初始普通用户为 `user` / `kgjy`；首次登录后请创建新的管理员账户并修改默认密码。
+不要把这个文件提交到 GitHub。后台使用用户名和密码登录；首次登录后请创建新的管理员账户并更换默认账户密码。
 
 ## 5. 创建 systemd 服务
 
@@ -221,9 +223,13 @@ http://101.96.193.137/admin.html
 
 ```bash
 cd /srv/mifan-ordering
-git pull --ff-only
+git fetch origin
+git reset --hard origin/main
+source "$(conda info --base)/etc/profile.d/conda.sh"
+conda activate mifan-node
+npm install --omit=dev
 systemctl restart mifan-ordering
-systemctl status mifan-ordering
+curl http://127.0.0.1:3000/api/health
 ```
 
 更新菜单或代码前备份数据：

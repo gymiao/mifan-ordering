@@ -4,11 +4,33 @@ const state = {
   query: '',
   cart: new Map(JSON.parse(localStorage.getItem('mifan-cart') || '[]')),
   fulfillment: 'delivery',
-  sharedDish: new URLSearchParams(location.search).get('dish') || ''
+  sharedDish: new URLSearchParams(location.search).get('dish') || '',
+  token: localStorage.getItem('mifan-customer-token') || '',
+  user: null,
+  pendingCheckout: false
 };
 
 const $ = (selector) => document.querySelector(selector);
 const money = (value) => `¥${Number(value).toFixed(value % 1 ? 1 : 0)}`;
+const authHeaders = () => state.token ? { Authorization: `Bearer ${state.token}` } : {};
+
+function openCustomerAuth(open) {
+  $('#customer-auth-modal').classList.toggle('open', open);
+  $('#customer-auth-modal').setAttribute('aria-hidden', String(!open));
+}
+function updateCustomerAccount() {
+  $('#customer-account').setAttribute('aria-label', state.user ? `已登录：${state.user.username}` : '登录');
+  $('#customer-account').title = state.user ? `已登录：${state.user.username}` : '登录后点餐';
+}
+async function loadCustomerSession() {
+  if (!state.token) return updateCustomerAccount();
+  try {
+    const response = await fetch('/api/auth/me', { headers: authHeaders() });
+    if (!response.ok) throw new Error();
+    state.user = (await response.json()).user;
+  } catch { state.token = ''; localStorage.removeItem('mifan-customer-token'); }
+  updateCustomerAccount();
+}
 
 async function loadMenu() {
   try {
@@ -150,13 +172,14 @@ async function copyText(value) {
 }
 
 async function checkout() {
+  if (!state.user) { state.pendingCheckout = true; openCustomerAuth(true); return; }
   const button = $('#checkout');
   button.disabled = true;
   button.firstElementChild.textContent = '正在下单…';
   try {
     const response = await fetch('/api/orders', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', ...authHeaders() },
       body: JSON.stringify({
         items: [...state.cart].map(([id, quantity]) => ({ id, quantity })),
         fulfillment: state.fulfillment,
@@ -208,6 +231,21 @@ $('#copy-order-link').addEventListener('click', async () => {
   try { await copyText($('#order-share-link').value); toast('商家处理链接已复制'); }
   catch { $('#order-share-link').focus(); $('#order-share-link').select(); toast('请长按链接后复制'); }
 });
+$('#customer-account').addEventListener('click', () => { if (state.user) toast(`已登录：${state.user.username}`); else openCustomerAuth(true); });
+$('#customer-auth-close').addEventListener('click', () => openCustomerAuth(false));
+$('#customer-auth-form').addEventListener('submit', async (event) => {
+  event.preventDefault();
+  $('#customer-auth-error').textContent = '';
+  try {
+    const response = await fetch('/api/auth/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ username: $('#customer-username').value, password: $('#customer-password').value }) });
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.error || '登录失败');
+    state.token = data.token; state.user = data.user; localStorage.setItem('mifan-customer-token', state.token); updateCustomerAccount(); openCustomerAuth(false);
+    if (state.pendingCheckout) { state.pendingCheckout = false; checkout(); }
+    else toast('登录成功，现在可以点餐');
+  } catch (error) { $('#customer-auth-error').textContent = error.message; }
+});
 document.addEventListener('keydown', (event) => { if (event.key === 'Escape') openCart(false); });
 
+loadCustomerSession();
 loadMenu();

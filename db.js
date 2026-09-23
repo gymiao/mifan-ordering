@@ -11,6 +11,7 @@ db.pragma('foreign_keys = ON');
 db.exec(`
   CREATE TABLE IF NOT EXISTS orders (
     id TEXT PRIMARY KEY,
+    user_id INTEGER REFERENCES users(id),
     status TEXT NOT NULL DEFAULT 'ordered' CHECK(status IN ('ordered', 'cooking', 'completed')),
     fulfillment TEXT NOT NULL CHECK(fulfillment IN ('delivery', 'pickup')),
     contact TEXT NOT NULL DEFAULT '',
@@ -50,6 +51,10 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_sessions_expires ON sessions(expires_at);
 `);
 
+const orderColumns = db.prepare('PRAGMA table_info(orders)').all().map((column) => column.name);
+if (!orderColumns.includes('user_id')) db.exec('ALTER TABLE orders ADD COLUMN user_id INTEGER');
+db.exec('CREATE INDEX IF NOT EXISTS idx_orders_user_created ON orders(user_id, created_at DESC)');
+
 function passwordHash(password, salt = crypto.randomBytes(16).toString('hex')) {
   return `${salt}:${crypto.scryptSync(password, salt, 64).toString('hex')}`;
 }
@@ -68,8 +73,8 @@ function seedUsers() {
 seedUsers();
 
 const insertOrder = db.transaction((order) => {
-  db.prepare(`INSERT INTO orders (id,status,fulfillment,contact,address,note,subtotal,delivery_fee,total,estimated_minutes,created_at)
-    VALUES (@id,@status,@fulfillment,@contact,@address,@note,@subtotal,@deliveryFee,@total,@estimatedMinutes,@createdAt)`).run(order);
+  db.prepare(`INSERT INTO orders (id,user_id,status,fulfillment,contact,address,note,subtotal,delivery_fee,total,estimated_minutes,created_at)
+    VALUES (@id,@userId,@status,@fulfillment,@contact,@address,@note,@subtotal,@deliveryFee,@total,@estimatedMinutes,@createdAt)`).run(order);
   const insertItem = db.prepare(`INSERT INTO order_items (order_id,item_id,name,price,quantity,subtotal)
     VALUES (@orderId,@id,@name,@price,@quantity,@subtotal)`);
   for (const item of order.items) insertItem.run({ orderId: order.id, ...item });
@@ -77,7 +82,7 @@ const insertOrder = db.transaction((order) => {
 
 function rowsToOrders(rows) {
   return rows.map((row) => ({
-    id: row.id, status: row.status, fulfillment: row.fulfillment, contact: row.contact,
+    id: row.id, userId: row.user_id, username: row.username || '', status: row.status, fulfillment: row.fulfillment, contact: row.contact,
     address: row.address, note: row.note, subtotal: row.subtotal, deliveryFee: row.delivery_fee,
     total: row.total, estimatedMinutes: row.estimated_minutes, createdAt: row.created_at,
     items: db.prepare('SELECT item_id AS id, name, price, quantity, subtotal FROM order_items WHERE order_id = ? ORDER BY id').all(row.id)
@@ -85,14 +90,19 @@ function rowsToOrders(rows) {
 }
 
 function getOrder(id) {
-  const row = db.prepare('SELECT * FROM orders WHERE id = ?').get(id);
+  const row = db.prepare('SELECT orders.*, users.username FROM orders LEFT JOIN users ON users.id = orders.user_id WHERE orders.id = ?').get(id);
   return row ? rowsToOrders([row])[0] : null;
 }
 
 function listOrders(status = 'all') {
   const rows = status === 'all'
-    ? db.prepare('SELECT * FROM orders ORDER BY created_at DESC').all()
-    : db.prepare("SELECT * FROM orders WHERE status = ? ORDER BY created_at DESC").all(status);
+    ? db.prepare('SELECT orders.*, users.username FROM orders LEFT JOIN users ON users.id = orders.user_id ORDER BY orders.created_at DESC').all()
+    : db.prepare("SELECT orders.*, users.username FROM orders LEFT JOIN users ON users.id = orders.user_id WHERE orders.status = ? ORDER BY orders.created_at DESC").all(status);
+  return rowsToOrders(rows);
+}
+
+function listOrdersByUser(userId) {
+  const rows = db.prepare('SELECT orders.*, users.username FROM orders LEFT JOIN users ON users.id = orders.user_id WHERE orders.user_id = ? ORDER BY orders.created_at DESC').all(userId);
   return rowsToOrders(rows);
 }
 
@@ -109,7 +119,7 @@ function login(username, password) {
   const rawToken = crypto.randomBytes(32).toString('base64url');
   const tokenHash = crypto.createHash('sha256').update(rawToken).digest('hex');
   const createdAt = new Date().toISOString();
-  const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
+  const expiresAt = '9999-12-31T23:59:59.999Z';
   db.prepare('INSERT INTO sessions (token_hash,user_id,expires_at,created_at) VALUES (?,?,?,?)').run(tokenHash, user.id, expiresAt, createdAt);
   return { token: rawToken, user: { id: user.id, username: user.username, role: user.role, expiresAt } };
 }
@@ -144,4 +154,4 @@ function updateUser(id, input) {
   return db.prepare('SELECT id,username,role,active,created_at FROM users WHERE id = ?').get(id);
 }
 
-module.exports = { db, insertOrder, getOrder, listOrders, updateOrderStatus, login, getSession, listUsers, createUser, updateUser };
+module.exports = { db, insertOrder, getOrder, listOrders, listOrdersByUser, updateOrderStatus, login, getSession, listUsers, createUser, updateUser };

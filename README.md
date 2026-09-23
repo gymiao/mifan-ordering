@@ -42,8 +42,9 @@ npm start
 | `PUT` | `/api/admin/menu/:id` | 编辑或上下架菜品，需要管理员会话 |
 | `DELETE` | `/api/admin/menu/:id` | 删除菜品，需要管理员会话 |
 | `POST` | `/api/admin/uploads` | 上传餐品图片，需要管理员会话 |
-| `POST` | `/api/orders` | 创建订单，价格以后端为准 |
-| `GET` | `/api/orders/:id` | 查询单个订单 |
+| `POST` | `/api/orders` | 创建订单，需要顾客登录，价格以后端为准 |
+| `GET` | `/api/orders/my` | 查询当前登录用户的订单 |
+| `GET` | `/api/orders/:id` | 查询当前用户自己的单个订单 |
 | `GET` | `/api/admin/orders?status=all` | 管理员查看订单，需要管理员令牌 |
 | `PATCH` | `/api/admin/orders/:id/status` | 管理员更新订单状态，需要管理员令牌 |
 
@@ -52,14 +53,12 @@ npm start
 ```json
 {
   "items": [{ "id": "beef-rice", "quantity": 2 }],
-  "fulfillment": "delivery",
-  "contact": "13800000000",
-  "address": "上海市黄浦区示例路 1 号",
+  "fulfillment": "pickup",
   "note": "不要香菜"
 }
 ```
 
-`contact` 和 `address` 都是可选字段。订单状态使用 `ordered`（已下单）、`cooking`（正在做）和 `completed`（已完成）。
+顾客必须登录才可提交订单，订单会关联用户 ID。订单状态使用 `ordered`（已下单）、`cooking`（正在做）和 `completed`（已完成）。
 
 下单成功会生成 `/admin.html?order=<订单号>`，商家登录后会自动定位该订单。管理后台的“分享”按钮会生成 `/?dish=<菜品ID>`；顾客打开后会自动聚焦对应菜品。
 
@@ -104,6 +103,6 @@ docker compose up -d --build
 curl http://127.0.0.1:3000/api/health
 ```
 
-菜单后台地址为 `https://你的域名/admin.html`。初始管理员是 `root`，初始密码是 `kgjy`；初始普通用户是 `user`，初始密码也是 `kgjy`。首次登录后请在“用户管理”中创建自己的管理员账户并更换默认密码。后台会话只保存在当前浏览器会话中。
+菜单后台地址为 `https://你的域名/admin.html`。初始管理员是 `root`，初始密码是 `kgjy`；初始普通用户是 `user`，初始密码也是 `kgjy`。登录 Token 默认长期有效，浏览器关闭后仍会保留；管理员停用用户即可撤销该用户全部访问。
 
 复制 `deploy/nginx.conf` 到服务器 Nginx 配置目录，替换其中的域名，再用 Certbot 或云厂商证书启用 HTTPS。`order-data` 卷用于保留订单文件；升级到 PostgreSQL 后应删除文件存储并把数据库凭据放入服务器环境变量。

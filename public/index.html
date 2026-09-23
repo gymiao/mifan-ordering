@@ -21,7 +21,7 @@
       <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 21s7-5.1 7-12A7 7 0 1 0 5 9c0 6.9 7 12 7 12Zm0-9.5A2.5 2.5 0 1 1 12 6a2.5 2.5 0 0 1 0 5.5Z"/></svg>
       <span>新天地店</span><span class="chevron">⌄</span>
     </button>
-    <button class="icon-btn" type="button" aria-label="个人中心">
+    <button class="icon-btn" id="customer-account" type="button" aria-label="登录">
       <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8Zm7 8a7 7 0 0 0-14 0"/></svg>
     </button>
     <a class="admin-link" href="/admin.html">商家后台 ↗</a>
@@ -86,5 +86,6 @@
   <div class="success-modal" id="success-modal" aria-hidden="true">
     <div class="success-card"><span class="success-icon">✓</span><h2>下单成功</h2><p id="success-copy"></p><div class="share-order"><small>分享给商家处理订单</small><input id="order-share-link" readonly><button id="copy-order-link" type="button">复制处理链接</button></div><button id="success-close">继续逛逛</button></div>
   </div>
+  <div class="customer-auth-modal" id="customer-auth-modal" aria-hidden="true"><form class="customer-auth-card" id="customer-auth-form"><button class="auth-close" id="customer-auth-close" type="button" aria-label="关闭">×</button><p class="eyebrow">CUSTOMER LOGIN</p><h2>登录后点餐</h2><p>订单会保存到你的账户中。</p><input id="customer-username" required autocomplete="username" placeholder="用户名"><input id="customer-password" required type="password" autocomplete="current-password" placeholder="密码"><p class="auth-error" id="customer-auth-error"></p><button type="submit">登录并继续点餐</button></form></div>
 </body>
 </html>

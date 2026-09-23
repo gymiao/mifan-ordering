@@ -1,0 +1,1 @@
+.customer-link{display:inline-block;margin-right:16px;color:var(--green);font-weight:700;text-decoration:none}.share-dish{border:0;background:transparent;color:var(--green);font-size:12px;cursor:pointer;margin-left:11px}.order-focus{outline:3px solid rgba(51,95,74,.2);outline-offset:-3px}@media(max-width:600px){.customer-link{margin-right:9px;font-size:11px}}

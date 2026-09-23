@@ -33,7 +33,11 @@ node --version
 npm --version
 ```
 
-本项目没有第三方 npm 依赖，不需要执行 `npm install`。
+本项目使用 SQLite，需要安装生产依赖：
+
+```bash
+npm install --omit=dev
+```
 
 ## 3. 拉取项目
 
@@ -199,7 +203,7 @@ systemctl status mifan-ordering
 
 ```bash
 cp /srv/mifan-ordering/data/menu.json /srv/mifan-ordering/data/menu.json.bak
-cp /srv/mifan-ordering/data/orders.json /srv/mifan-ordering/data/orders.json.bak 2>/dev/null || true
+cp /srv/mifan-ordering/data/mifan.sqlite /srv/mifan-ordering/data/mifan.sqlite.bak 2>/dev/null || true
 ```
 
 餐品图片保存在 `/srv/mifan-ordering/data/uploads/`，该目录已被 `.gitignore` 排除，不会进入 Git。备份时也要包含这个目录：

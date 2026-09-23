@@ -3,7 +3,8 @@ const state = {
   category: 'all',
   query: '',
   cart: new Map(JSON.parse(localStorage.getItem('mifan-cart') || '[]')),
-  fulfillment: 'delivery'
+  fulfillment: 'delivery',
+  sharedDish: new URLSearchParams(location.search).get('dish') || ''
 };
 
 const $ = (selector) => document.querySelector(selector);
@@ -41,11 +42,12 @@ function quantityControl(item) {
 function renderMenu() {
   const query = state.query.toLowerCase();
   const items = state.menu.items.filter((item) =>
+    item.available &&
     (state.category === 'all' || item.category === state.category) &&
     (!query || `${item.name}${item.description}${item.tags.join('')}`.toLowerCase().includes(query))
   );
   $('#menu-grid').innerHTML = items.length ? items.map((item) => `
-    <article class="dish-card">
+    <article class="dish-card ${item.id === state.sharedDish ? 'shared-dish' : ''}" data-dish-id="${item.id}">
       <div class="dish-visual ${item.image ? 'has-image image-loading' : ''}" style="background:${item.color}28">
         ${item.tags[0] ? `<span class="badge">${item.tags[0]}</span>` : ''}
         ${item.image ? `<span class="image-loading-label">图片加载中…</span><img class="dish-image" src="${item.image}" alt="${item.name}" loading="lazy"><span class="dish-emoji image-fallback" hidden>${item.emoji}</span>` : `<span class="dish-emoji">${item.emoji}</span>`}
@@ -71,6 +73,8 @@ function renderMenu() {
       if (fallback) fallback.hidden = false;
     }, { once: true });
   });
+  const sharedCard = document.querySelector('.shared-dish');
+  if (sharedCard) requestAnimationFrame(() => sharedCard.scrollIntoView({ behavior: 'smooth', block: 'center' }));
 }
 
 function cartTotals() {
@@ -152,6 +156,7 @@ async function checkout() {
     localStorage.removeItem('mifan-cart');
     renderMenu(); renderCart(); openCart(false);
     $('#success-copy').textContent = `订单号 ${data.order.id}，预计 ${data.order.estimatedMinutes} 分钟准备完成。`;
+    $('#order-share-link').value = `${location.origin}/admin.html?order=${encodeURIComponent(data.order.id)}`;
     $('#success-modal').classList.add('open');
     $('#success-modal').setAttribute('aria-hidden', 'false');
   } catch (error) {
@@ -183,6 +188,10 @@ $('#checkout').addEventListener('click', checkout);
 $('#success-close').addEventListener('click', () => {
   $('#success-modal').classList.remove('open');
   $('#success-modal').setAttribute('aria-hidden', 'true');
+});
+$('#copy-order-link').addEventListener('click', async () => {
+  try { await navigator.clipboard.writeText($('#order-share-link').value); toast('商家处理链接已复制'); }
+  catch { $('#order-share-link').select(); document.execCommand('copy'); toast('商家处理链接已复制'); }
 });
 document.addEventListener('keydown', (event) => { if (event.key === 'Escape') openCart(false); });
 

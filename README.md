@@ -1,6 +1,6 @@
 # 米饭食堂点餐系统
 
-一个可直接运行的前后端点餐 MVP。前端使用原生 HTML/CSS/JavaScript，后端使用 Node.js 内置 HTTP 服务，不依赖第三方运行库，适合快速验证和低成本部署。
+一个可直接运行的前后端点餐 MVP。前端使用原生 HTML/CSS/JavaScript，后端使用 Node.js HTTP 服务和 SQLite 数据库，适合快速验证和低成本部署。
 
 服务器使用 Conda 部署时，请直接查看 [CONDA_DEPLOYMENT.md](CONDA_DEPLOYMENT.md)。
 
@@ -21,9 +21,11 @@ npm start
 - 购物车本地持久化，交互无需等待网络
 - 外卖配送与到店自取切换
 - 后端重新校验商品、价格、数量和配送费
-- 订单持久化到 `data/orders.json`，采用临时文件替换避免写入半成品
+- 订单和订单明细持久化到 `data/mifan.sqlite`，启用 WAL 和索引
 - 菜单缓存、静态资源长缓存、健康检查接口
 - `/admin.html` 菜单管理后台，支持新增、编辑、删除、上下架
+- 订单中心支持按状态筛选、按下单时间倒序显示和状态更新
+- 顾客页与商家后台互相提供入口；下单和菜品都支持深链接分享
 - 管理后台支持 JPG、PNG、WebP 餐品图片上传，单张最大 8MB
 - 管理写接口使用 `ADMIN_TOKEN` 鉴权，菜单公开接口保持只读
 
@@ -41,6 +43,8 @@ npm start
 | `POST` | `/api/admin/uploads` | 上传餐品图片，需要管理员令牌 |
 | `POST` | `/api/orders` | 创建订单，价格以后端为准 |
 | `GET` | `/api/orders/:id` | 查询单个订单 |
+| `GET` | `/api/admin/orders?status=all` | 管理员查看订单，需要管理员令牌 |
+| `PATCH` | `/api/admin/orders/:id/status` | 管理员更新订单状态，需要管理员令牌 |
 
 创建订单示例：
 
@@ -54,9 +58,13 @@ npm start
 }
 ```
 
+`contact` 和 `address` 都是可选字段。订单状态使用 `ordered`（已下单）、`cooking`（正在做）和 `completed`（已完成）。
+
+下单成功会生成 `/admin.html?order=<订单号>`，商家登录后会自动定位该订单。管理后台的“分享”按钮会生成 `/?dish=<菜品ID>`；顾客打开后会自动聚焦对应菜品。
+
 ## 上服务器的建议方案
 
-当前版本适合演示、内测和单店低流量运行。正式营业建议保持现有 API 契约，将订单存储换成 PostgreSQL，并增加 Redis 防重复下单和限流。推荐拓扑：
+当前版本适合演示、内测和单店低流量运行。正式营业建议保持现有 API 契约，将 SQLite 迁移到 PostgreSQL，并增加 Redis 防重复下单和限流。推荐拓扑：
 
 ```text
 浏览器 / 微信扫码

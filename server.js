@@ -2,6 +2,7 @@ const http = require('node:http');
 const fs = require('node:fs');
 const path = require('node:path');
 const crypto = require('node:crypto');
+const { insertOrder, getOrder, listOrders, updateOrderStatus } = require('./db');
 
 const PORT = Number(process.env.PORT || 3000);
 const HOST = process.env.HOST || '0.0.0.0';
@@ -9,16 +10,12 @@ const ADMIN_TOKEN = process.env.ADMIN_TOKEN || '';
 const PUBLIC_DIR = path.join(__dirname, 'public');
 const DATA_DIR = path.join(__dirname, 'data');
 const MENU_FILE = path.join(DATA_DIR, 'menu.json');
-const ORDER_FILE = path.join(DATA_DIR, 'orders.json');
 const UPLOAD_DIR = path.join(DATA_DIR, 'uploads');
 const MAX_BODY = 64 * 1024;
 const MAX_UPLOAD = 8 * 1024 * 1024;
 fs.mkdirSync(UPLOAD_DIR, { recursive: true });
 let menu = JSON.parse(fs.readFileSync(MENU_FILE, 'utf8'));
 let menuById = new Map(menu.items.map((item) => [item.id, item]));
-
-let orders = [];
-try { orders = JSON.parse(fs.readFileSync(ORDER_FILE, 'utf8')); } catch { orders = []; }
 
 const contentTypes = {
   '.html': 'text/html; charset=utf-8',
@@ -90,12 +87,6 @@ function detectImageExtension(file) {
   if (type.length >= 3 && type.subarray(0, 3).equals(Buffer.from([255, 216, 255]))) return 'jpg';
   if (type.length >= 12 && type.toString('ascii', 0, 4) === 'RIFF' && type.toString('ascii', 8, 12) === 'WEBP') return 'webp';
   throw new Error('只支持 JPG、PNG 或 WebP 图片');
-}
-
-function persistOrders() {
-  const tempFile = `${ORDER_FILE}.tmp`;
-  fs.writeFileSync(tempFile, JSON.stringify(orders, null, 2));
-  fs.renameSync(tempFile, ORDER_FILE);
 }
 
 function persistMenu() {
@@ -173,10 +164,8 @@ function calculateOrder(input) {
     ? menu.restaurant.deliveryFee : 0;
   const contact = String(input.contact || '').trim().slice(0, 40);
   const address = String(input.address || '').trim().slice(0, 160);
-  if (!contact) throw new Error('请填写联系电话');
-  if (input.fulfillment === 'delivery' && !address) throw new Error('请填写配送地址');
   return {
-    status: 'confirmed',
+    status: 'ordered',
     fulfillment: input.fulfillment,
     contact,
     address,
@@ -195,9 +184,7 @@ function createOrder(input) {
     id: `MF${Date.now().toString().slice(-8)}${crypto.randomInt(10, 99)}`,
     ...calculateOrder(input)
   };
-  orders.unshift(order);
-  orders = orders.slice(0, 1000);
-  persistOrders();
+  insertOrder(order);
   return order;
 }
 
@@ -283,6 +270,23 @@ const server = http.createServer(async (req, res) => {
       return json(res, 200, { item });
     } catch (error) { return adminError(res, error); }
   }
+  if (req.method === 'GET' && url.pathname === '/api/admin/orders') {
+    try {
+      requireAdmin(req);
+      const status = url.searchParams.get('status') || 'all';
+      if (!['all', 'ordered', 'cooking', 'completed'].includes(status)) throw new Error('订单状态无效');
+      return json(res, 200, { orders: listOrders(status) });
+    } catch (error) { return adminError(res, error); }
+  }
+  const adminOrderMatch = url.pathname.match(/^\/api\/admin\/orders\/([A-Za-z0-9-]+)\/status$/);
+  if (req.method === 'PATCH' && adminOrderMatch) {
+    try {
+      requireAdmin(req);
+      const input = await readBody(req);
+      const order = updateOrderStatus(adminOrderMatch[1], input.status);
+      return order ? json(res, 200, { order }) : json(res, 404, { error: '订单不存在' });
+    } catch (error) { return adminError(res, error); }
+  }
   if (req.method === 'POST' && url.pathname === '/api/orders') {
     try {
       const order = createOrder(await readBody(req));
@@ -293,7 +297,7 @@ const server = http.createServer(async (req, res) => {
   }
   const match = url.pathname.match(/^\/api\/orders\/([A-Za-z0-9-]+)$/);
   if (req.method === 'GET' && match) {
-    const order = orders.find((entry) => entry.id === match[1]);
+    const order = getOrder(match[1]);
     return order ? json(res, 200, { order }) : json(res, 404, { error: '订单不存在' });
   }
   if (req.method === 'GET' || req.method === 'HEAD') return serveStatic(req, res, url.pathname);

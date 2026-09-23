@@ -2,14 +2,15 @@
 <html lang="zh-CN">
 <head>
   <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>米饭食堂 · 菜单管理</title><link rel="stylesheet" href="/admin.css"><script src="/admin.js" defer></script>
+  <title>米饭食堂 · 菜单管理</title><link rel="stylesheet" href="/admin.css"><link rel="stylesheet" href="/admin-orders.css"><link rel="stylesheet" href="/admin-share.css"><script src="/admin.js" defer></script>
 </head>
 <body>
-  <header class="admin-header"><a href="/" class="brand"><span>米</span>米饭食堂</a><div><span class="status-dot"></span>菜单管理后台</div></header>
+  <header class="admin-header"><a href="/" class="brand"><span>米</span>米饭食堂</a><div><a class="customer-link" href="/">顾客点餐页 ↗</a><span class="status-dot"></span>菜单管理后台</div></header>
   <main class="admin-main">
     <section class="admin-title"><div><p class="eyebrow">MENU CONTROL</p><h1>菜单管理</h1><p>维护顾客端展示的菜品、价格和售卖状态。</p></div><button class="primary" id="new-item">＋ 新增菜品</button></section>
     <section class="toolbar"><label class="search">⌕ <input id="filter" placeholder="搜索菜品名称"></label><select id="category-filter"><option value="all">全部分类</option></select><span id="item-count"></span></section>
     <section class="table-wrap"><table><thead><tr><th>菜品</th><th>分类</th><th>价格</th><th>销量</th><th>状态</th><th></th></tr></thead><tbody id="item-list"><tr><td colspan="6" class="loading">正在加载菜单…</td></tr></tbody></table></section>
+    <section class="orders-section"><div class="orders-heading"><div><p class="eyebrow">ORDER INBOX</p><h2>订单中心</h2></div><div class="order-tools"><select id="order-status"><option value="all">全部订单</option><option value="ordered">已下单</option><option value="cooking">正在做</option><option value="completed">已完成</option></select><span id="order-count"></span></div></div><div class="table-wrap"><table><thead><tr><th>订单</th><th>菜品</th><th>顾客信息</th><th>金额</th><th>下单时间</th><th>状态</th></tr></thead><tbody id="order-list"><tr><td colspan="6" class="loading">登录后加载订单…</td></tr></tbody></table></div></section>
   </main>
   <div class="modal" id="modal" aria-hidden="true"><div class="modal-card"><div class="modal-head"><div><p class="eyebrow">DISH EDITOR</p><h2 id="modal-title">新增菜品</h2></div><button class="icon-close" id="cancel">×</button></div><form id="item-form">
     <div class="form-grid"><label>菜品名称<input name="name" required maxlength="40"></label><label>价格（元）<input name="price" required type="number" min="0.01" step="0.01"></label><label>分类<select name="category" id="item-category" required></select></label><label>Emoji 图标<input name="emoji" maxlength="4" placeholder="🍱"></label><label class="wide">菜品描述<input name="description" required maxlength="120"></label><label>标签（逗号分隔）<input name="tags" placeholder="招牌,热销"></label><label>背景色<input name="color" type="color" value="#7da66a"></label><label class="wide">餐品图片<input name="image" type="file" accept="image/jpeg,image/png,image/webp"><input name="imageUrl" type="hidden"><small class="image-tip" id="image-tip">支持 JPG、PNG、WebP，最大 8MB</small></label></div>

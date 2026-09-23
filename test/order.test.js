@@ -31,20 +31,19 @@ test('达到免配送门槛后配送费为零', () => {
   if (order.subtotal >= menu.restaurant.freeDeliveryAt) assert.equal(order.deliveryFee, 0);
 });
 
-test('自取订单不收配送费，也不要求配送地址', () => {
+test('电话和地址均可选，自取订单不收配送费', () => {
   const order = calculateOrder({
     fulfillment: 'pickup',
-    contact: '13800000000',
     items: [{ id: firstItem.id, quantity: 1 }]
   });
 
   assert.equal(order.deliveryFee, 0);
   assert.equal(order.estimatedMinutes, 20);
+  assert.equal(order.contact, '');
+  assert.equal(order.address, '');
 });
 
-test('后端拒绝未知商品、非法数量和缺少必要信息', () => {
+test('后端拒绝未知商品和非法数量', () => {
   assert.throws(() => calculateOrder({ fulfillment: 'delivery', contact: '1', address: '地址', items: [{ id: 'missing', quantity: 1 }] }), /商品或数量无效/);
   assert.throws(() => calculateOrder({ fulfillment: 'delivery', contact: '1', address: '地址', items: [{ id: firstItem.id, quantity: 0 }] }), /商品或数量无效/);
-  assert.throws(() => calculateOrder({ fulfillment: 'delivery', contact: '', address: '地址', items: [{ id: firstItem.id, quantity: 1 }] }), /请填写联系电话/);
-  assert.throws(() => calculateOrder({ fulfillment: 'delivery', contact: '1', items: [{ id: firstItem.id, quantity: 1 }] }), /请填写配送地址/);
 });

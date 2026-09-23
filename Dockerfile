@@ -5,9 +5,10 @@ ENV NODE_ENV=production \
     HOST=0.0.0.0
 
 WORKDIR /app
-COPY --chown=node:node package.json server.js ./
+COPY --chown=node:node package.json server.js db.js ./
 COPY --chown=node:node public ./public
 COPY --chown=node:node data ./data
+RUN npm install --omit=dev
 
 USER node
 EXPOSE 3000

@@ -7,6 +7,7 @@
   <meta name="description" content="米饭食堂在线点餐">
   <title>米饭食堂 · 在线点餐</title>
   <link rel="stylesheet" href="/styles.css">
+  <link rel="stylesheet" href="/share.css">
   <script src="/app.js" defer></script>
 </head>
 <body>
@@ -22,6 +23,7 @@
     <button class="icon-btn" type="button" aria-label="个人中心">
       <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8Zm7 8a7 7 0 0 0-14 0"/></svg>
     </button>
+    <a class="admin-link" href="/admin.html">商家后台 ↗</a>
   </header>
 
   <main>
@@ -68,8 +70,8 @@
       <div class="cart-items" id="cart-items"></div>
       <div class="cart-empty" id="cart-empty"><span>🍚</span><p>餐篮还是空的</p><small>去挑几样喜欢的吧</small></div>
       <div class="checkout-fields" id="checkout-fields">
-        <input id="contact" inputmode="tel" maxlength="40" placeholder="联系电话">
-        <input id="address" maxlength="160" placeholder="配送地址">
+        <input id="contact" inputmode="tel" maxlength="40" placeholder="联系电话（选填）">
+        <input id="address" maxlength="160" placeholder="配送地址（选填）">
         <input id="note" maxlength="120" placeholder="备注（选填）">
       </div>
       <div class="summary" id="summary"></div>
@@ -83,7 +85,7 @@
 
   <div class="toast" id="toast" role="status"></div>
   <div class="success-modal" id="success-modal" aria-hidden="true">
-    <div class="success-card"><span class="success-icon">✓</span><h2>下单成功</h2><p id="success-copy"></p><button id="success-close">继续逛逛</button></div>
+    <div class="success-card"><span class="success-icon">✓</span><h2>下单成功</h2><p id="success-copy"></p><div class="share-order"><small>分享给商家处理订单</small><input id="order-share-link" readonly><button id="copy-order-link" type="button">复制处理链接</button></div><button id="success-close">继续逛逛</button></div>
   </div>
 </body>
 </html>
